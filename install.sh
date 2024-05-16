@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Function to print and exit on error
 exit_on_error() {
