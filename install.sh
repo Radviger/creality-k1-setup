@@ -107,6 +107,8 @@ mkdir -p $MOONRAKER_DIR || exit_on_error "Failed to create directory $MOONRAKER_
 cd $WORKING_DIR || exit_on_error "Failed to change directory to $WORKING_DIR"
 git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR || exit_on_error "Failed to clone Moonraker"
 cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR"
+echo "Checking if install-moonraker.sh exists..."
+ls -l ./scripts/
 if [ ! -f "./scripts/install-moonraker.sh" ]; then
     exit_on_error "install-moonraker.sh not found"
 fi
