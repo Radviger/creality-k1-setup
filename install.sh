@@ -103,9 +103,8 @@ if [ ! -d "$MAINSAIL_DIR" ]; then
     mkdir -p $MAINSAIL_DIR || exit_on_error "Failed to create directory $MAINSAIL_DIR"
 fi
 cd $MAINSAIL_DIR || exit_on_error "Failed to change directory to $MAINSAIL_DIR"
-wget https://github.com/meteyou/mainsail/releases/latest/download/mainsail.zip || exit_on_error "Failed to download Mainsail"
-unzip mainsail.zip || exit_on_error "Failed to unzip mainsail.zip"
-rm mainsail.zip || exit_on_error "Failed to remove mainsail.zip"
+clone https://github.com/mainsail-crew/mainsail.git || exit_on_error "Failed to download Mainsail"
+
 
 # Install Moonraker
 echo "Installing Moonraker..."
@@ -126,9 +125,8 @@ if [ ! -d "$FLUIDD_DIR" ]; then
     mkdir -p $FLUIDD_DIR || exit_on_error "Failed to create directory $FLUIDD_DIR"
 fi
 cd $FLUIDD_DIR || exit_on_error "Failed to change directory to $FLUIDD_DIR"
-wget https://github.com/cadriel/fluidd/releases/latest/download/fluidd.zip || exit_on_error "Failed to download Fluidd"
-unzip fluidd.zip || exit_on_error "Failed to unzip fluidd.zip"
-rm fluidd.zip || exit_on_error "Failed to remove fluidd.zip"
+git clone https://github.com/fluidd-core/fluidd.git || exit_on_error "Failed to download Fluidd"
+
 
 # Configure Nginx for Mainsail and Fluidd
 echo "Configuring Nginx..."
