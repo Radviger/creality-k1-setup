@@ -113,10 +113,14 @@ if [ ! -f "./scripts/install-moonraker.sh" ]; then
     exit_on_error "install-moonraker.sh not found"
 fi
 
-# Run install-moonraker.sh as root, ignoring the user check
-echo "Running install-moonraker.sh with bash as root..."
+# Modify the install-moonraker.sh script
+echo "Modifying install-moonraker.sh to work without sudo and apt-get..."
+sed -i 's/sudo //g' ./scripts/install-moonraker.sh
+sed -i '/apt-get/d' ./scripts/install-moonraker.sh
+
+# Run install-moonraker.sh with bash
+echo "Running install-moonraker.sh with bash..."
 chmod +x ./scripts/install-moonraker.sh || exit_on_error "Failed to set execute permissions on install-moonraker.sh"
-sed -i 's/if \[ "\$EUID" -eq 0 \]; then/if false; then/' ./scripts/install-moonraker.sh || exit_on_error "Failed to modify install-moonraker.sh"
 bash ./scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
 
 # Install Mainsail
