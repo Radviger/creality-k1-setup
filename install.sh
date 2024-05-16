@@ -14,11 +14,6 @@ else
     echo "Internet connection verified."
 fi
 
-# Check for sufficient disk space (1GB in this example)
-if [ $(df --output=avail "$PWD" | tail -n1) -lt 1000000 ]; then
-    exit_on_error "Not enough disk space. Please free up some space and try again."
-fi
-
 # Set the working directory
 WORKING_DIR="/usr/data"
 PACKAGES_DIR="$WORKING_DIR/packages"
@@ -81,14 +76,14 @@ done
 # Install Python packages
 echo "Installing Python packages..."
 pip3 install --no-index --find-links=$PACKAGES_DIR -r requirements.txt || echo "Failed to install Python packages from $PACKAGES_DIR. Attempting to install from PyPI..."
-pip3 install --no-cache-dir -r requirements_pypi.txt || echo "Failed to install Python packages from PyPI"
+pip3 install --no-cache-dir -r requirements_pypi.txt || exit_on_error "Failed to install Python packages from PyPI"
 
 # Check for Python version compatibility
 python_version=$(python3 -c 'import sys; print(sys.version_info.major, sys.version_info.minor)')
 major_version=$(echo $python_version | cut -d' ' -f1)
 minor_version=$(echo $python_version | cut -d' ' -f2)
 
-if [ $major_version -lt 3 ] || [ $major_version -eq 3 -a $minor_version -lt 6 ]; then
+if [ $major_version -lt 3 ] || { [ $major_version -eq 3 ] && [ $minor_version -lt 6 ]; }; then
     exit_on_error "Python version is not compatible. Please upgrade to Python 3.6 or later."
 fi
 
@@ -96,15 +91,12 @@ fi
 echo "Installing Nginx..."
 opkg install nginx || exit_on_error "Failed to install Nginx"
 
-# Create a new user for Moonraker
-MOONRAKER_USER="moonrakeruser"
-echo "Creating user $MOONRAKER_USER..."
-if ! id -u $MOONRAKER_USER > /dev/null 2>&1; then
-    adduser -h /home/$MOONRAKER_USER -D $MOONRAKER_USER || exit_on_error "Failed to create user $MOONRAKER_USER"
-    mkdir -p /home/$MOONRAKER_USER || exit_on_error "Failed to create home directory for $MOONRAKER_USER"
-    chown -R $MOONRAKER_USER:$MOONRAKER_USER /home/$MOONRAKER_USER || exit_on_error "Failed to set ownership for home directory"
+# Create moonrakeruser and home directory
+echo "Creating user moonrakeruser..."
+if ! id "moonrakeruser" >/dev/null 2>&1; then
+    adduser -h /usr/data/home/moonrakeruser -D moonrakeruser || exit_on_error "Failed to create user moonrakeruser"
 else
-    echo "User $MOONRAKER_USER already exists."
+    echo "User moonrakeruser already exists."
 fi
 
 # Install Moonraker
@@ -124,20 +116,21 @@ if [ ! -f "./scripts/install-moonraker.sh" ]; then
     exit_on_error "install-moonraker.sh not found"
 fi
 
-# Modify the install-moonraker.sh script to remove 'sudo' and 'apt-get'
+# Modify the install-moonraker.sh script
 echo "Modifying install-moonraker.sh to work without sudo and apt-get..."
 sed -i 's/sudo //g' ./scripts/install-moonraker.sh
 sed -i '/apt-get/d' ./scripts/install-moonraker.sh
 
-# Ensure /home/$MOONRAKER_USER directory exists
-if [ ! -d "/home/$MOONRAKER_USER" ]; then
-    mkdir -p /home/$MOONRAKER_USER || exit_on_error "Failed to create home directory for $MOONRAKER_USER"
-    chown -R $MOONRAKER_USER:$MOONRAKER_USER /home/$MOONRAKER_USER || exit_on_error "Failed to set ownership for home directory"
+# Ensure bash is installed
+BASH_PATH=$(which bash)
+if [ -z "$BASH_PATH" ]; then
+    echo "Bash is not installed. Installing bash..."
+    opkg install bash || exit_on_error "Failed to install bash"
 fi
 
 # Run install-moonraker.sh with bash as moonrakeruser
-echo "Running install-moonraker.sh with bash as $MOONRAKER_USER..."
-su - $MOONRAKER_USER -c "bash $MOONRAKER_DIR/scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script as $MOONRAKER_USER"
+echo "Running install-moonraker.sh with bash as moonrakeruser..."
+su moonrakeruser -c "bash ./scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script as moonrakeruser"
 
 # Install Mainsail
 echo "Installing Mainsail..."
