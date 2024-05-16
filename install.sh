@@ -52,7 +52,7 @@ else
 fi
 
 # List of packages and their versions
-packages_versions="python3-lib2to3-3.11.7-1 libzstd-1.5.5-1 python3-dev-3.11.7-1 make-4.4.1-1 gcc-8.4.0-5c binutils-2.41-1 ar-2.41-1 objdump-2.41-1 libbfd-2.41-1 libopcodes-2.41-1 libintl-full-0.21.1-2 wget-1.21.1-1 curl-8.6.0-1 sudo-1.8.31-1"
+packages_versions="python3-lib2to3-3.11.7-1 libzstd-1.5.5-1 python3-dev-3.11.7-1 make-4.4.1-1 gcc-8.4.0-5c binutils-2.41-1 ar-2.41-1 objdump-2.41-1 libbfd-2.41-1 libopcodes-2.41-1 libintl-full-0.21.1-2 wget-1.21.1-1 curl-8.6.0-1 sudo-1.8.31-1 bash-5.2.15-1"
 
 # Install IPK packages using Entware
 echo "Installing IPK packages..."
@@ -129,9 +129,14 @@ echo "Modifying install-moonraker.sh to work without sudo and apt-get..."
 sed -i 's/sudo //g' ./scripts/install-moonraker.sh
 sed -i '/apt-get/d' ./scripts/install-moonraker.sh
 
+# Ensure /home/$MOONRAKER_USER directory exists
+if [ ! -d "/home/$MOONRAKER_USER" ]; then
+    mkdir -p /home/$MOONRAKER_USER || exit_on_error "Failed to create home directory for $MOONRAKER_USER"
+    chown -R $MOONRAKER_USER:$MOONRAKER_USER /home/$MOONRAKER_USER || exit_on_error "Failed to set ownership for home directory"
+fi
+
 # Run install-moonraker.sh with bash as moonrakeruser
 echo "Running install-moonraker.sh with bash as $MOONRAKER_USER..."
-chown -R $MOONRAKER_USER:$MOONRAKER_USER $MOONRAKER_DIR || exit_on_error "Failed to set ownership for Moonraker directory"
 su - $MOONRAKER_USER -c "bash $MOONRAKER_DIR/scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script as $MOONRAKER_USER"
 
 # Install Mainsail
