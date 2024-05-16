@@ -104,9 +104,12 @@ if [ -d "$MOONRAKER_DIR" ]; then
     rm -rf $MOONRAKER_DIR || exit_on_error "Failed to delete directory $MOONRAKER_DIR"
 fi
 mkdir -p $MOONRAKER_DIR || exit_on_error "Failed to create directory $MOONRAKER_DIR"
-cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR"
+cd $WORKING_DIR || exit_on_error "Failed to change directory to $WORKING_DIR"
 git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR || exit_on_error "Failed to clone Moonraker"
 cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR"
+if [ ! -f "./scripts/install-moonraker.sh" ]; then
+    exit_on_error "install-moonraker.sh not found"
+fi
 dos2unix ./scripts/install-moonraker.sh || exit_on_error "Failed to convert line endings"
 chmod +x ./scripts/install-moonraker.sh || exit_on_error "Failed to set execute permissions on install-moonraker.sh"
 ./scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
@@ -120,8 +123,7 @@ if [ -d "$MAINSAIL_DIR" ]; then
 fi
 mkdir -p $MAINSAIL_DIR || exit_on_error "Failed to create directory $MAINSAIL_DIR"
 cd $MAINSAIL_DIR || exit_on_error "Failed to change directory to $MAINSAIL_DIR"
-git clone https://github.com/mainsail-crew/mainsail.git || exit_on_error "Failed to download Mainsail"
-
+git clone https://github.com/mainsail-crew/mainsail.git . || exit_on_error "Failed to download Mainsail"
 
 # Install Fluidd
 echo "Installing Fluidd..."
@@ -132,8 +134,7 @@ if [ -d "$FLUIDD_DIR" ]; then
 fi
 mkdir -p $FLUIDD_DIR || exit_on_error "Failed to create directory $FLUIDD_DIR"
 cd $FLUIDD_DIR || exit_on_error "Failed to change directory to $FLUIDD_DIR"
-git clone https://github.com/fluidd-core/fluidd.git || exit_on_error "Failed to download Fluidd"
-
+git clone https://github.com/fluidd-core/fluidd.git . || exit_on_error "Failed to download Fluidd"
 
 # Configure Nginx for Mainsail and Fluidd
 echo "Configuring Nginx..."
