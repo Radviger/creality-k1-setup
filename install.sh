@@ -1,45 +1,89 @@
-#!/bin/bash
+#!/bin/sh
 
-# This script sets up Mainsail and Fluidd on Creality K1 and K1-Max printers.
+# Check if connected to the internet
+ping -c 1 google.com > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "No internet connection. Please download the necessary packages manually."
+  exit 1
+fi
 
-echo "Starting setup for Creality K1/K1-Max..."
+# Install IPK packages using Entware
+echo "Installing IPK packages..."
+while read -r package; do
+  opkg install "$package"
+done < ipk-packages.txt
 
-# Step 1: Install Entware
-echo "Installing Entware..."
-cd /tmp
-wget http://bin.entware.net/mipselsf-k3.4/installer/generic.sh
-sh generic.sh
+# Install Python packages
+echo "Installing Python packages..."
+pip3 install --no-index --find-links=/usr/data/packages -r requirements.txt
 
-# Initialize and update Entware
-/opt/bin/opkg update
-/opt/bin/opkg upgrade
+# Install Nginx
+echo "Installing Nginx..."
+opkg install nginx
 
-# Step 2: Install necessary packages
-echo "Installing necessary packages..."
-/opt/bin/opkg install make gcc python3-dev python3-pip git
+# Install Mainsail
+echo "Installing Mainsail..."
+mkdir -p /opt/mainsail
+cd /opt/mainsail
+wget https://github.com/meteyou/mainsail/releases/latest/download/mainsail.zip
+unzip mainsail.zip
+rm mainsail.zip
 
-# Step 3: Install Python packages
-/opt/bin/pip3 install wheel setuptools
-/opt/bin/pip3 install watchdog PyYAML Markdown Jinja2 packaging mergedeep importlib-metadata zipp tomli typing-extensions
+# Install Moonraker
+echo "Installing Moonraker..."
+cd /opt
+git clone https://github.com/Arksine/moonraker.git
+cd moonraker
+./scripts/install-moonraker.sh
 
-# Create directories for configuration and assets
-mkdir -p /usr/data/config /usr/data/assets/img/home
+# Install Fluidd
+echo "Installing Fluidd..."
+mkdir -p /opt/fluidd
+cd /opt/fluidd
+wget https://github.com/cadriel/fluidd/releases/latest/download/fluidd.zip
+unzip fluidd.zip
+rm fluidd.zip
 
-# Download logo and favicon
-wget -O /usr/data/assets/img/home/logo.png [URL-to-logo]
-wget -O /usr.data/assets/img/home/favicon.png [URL-to-favicon]
+# Configure Nginx for Mainsail and Fluidd
+echo "Configuring Nginx..."
+cat <<EOF > /etc/nginx/nginx.conf
+server {
+    listen 80;
+    server_name _;
 
-# Download extra assets
-wget -O /usr/data/assets/stylesheets/extra.css [URL-to-extra-css]
-wget -O /usr/data/assets/stylesheets/glightbox.min.css [URL-to-glightbox-css]
-wget -O /usr/data/assets/javascripts/glightbox.min.js [URL-to-glightbox-js]
-wget -O /usr/data/assets/javascripts/external_links.js [URL-to-external-js]
+    location / {
+        root /opt/mainsail;
+        try_files \$uri \$uri/ /index.html;
+    }
+}
 
-# Step 4: Configure the server
-echo "Configuring server..."
-# Additional server configuration goes here
+server {
+    listen 8888;
+    server_name _;
 
-echo "Setup complete! Access the web interface via the printer's IP address."
+    location / {
+        root /opt/fluidd;
+        try_files \$uri \$uri/ /index.html;
+    }
 
-# Reminder to configure Moonraker, Mainsail, and Fluidd as per their documentation.
-echo "Please configure Moonraker, Mainsail, and Fluidd as per their documentation."
+    location /moonraker {
+        proxy_pass http://localhost:7125;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+    }
+}
+EOF
+
+# Restart Nginx
+echo "Restarting Nginx..."
+/etc/init.d/nginx restart
+
+# Start Moonraker
+echo "Starting Moonraker..."
+systemctl start moonraker
+systemctl enable moonraker
+
+echo "Installation complete! Mainsail is running on port 80 and Fluidd on port 8888."
+
