@@ -51,16 +51,34 @@ else
     exit_on_error "No printer.cfg found to copy."
 fi
 
+# List of packages to install
+packages=("python3-lib2to3" "libzstd" "python3-dev" "make" "gcc" "binutils" "ar" "objdump" "libbfd" "libopcodes" "libintl-full" "wget" "curl")
+
+# Specific versions to install
+versions=("3.11.7-1" "1.5.5-1" "3.11.7-1" "4.4.1-1" "8.4.0-5c" "2.41-1" "2.41-1" "2.41-1" "2.41-1" "2.41-1" "0.21.1-2" "1.21.1-1" "8.6.0-1")
+
 # Install IPK packages using Entware
 echo "Installing IPK packages..."
-while read -r package; do
-    if [ -f "$PACKAGES_DIR/$package" ]; then
-        opkg install "$PACKAGES_DIR/$package" || exit_on_error "Failed to install $package from $PACKAGES_DIR"
+for i in ${!packages[@]}; do
+    package=${packages[$i]}
+    version=${versions[$i]}
+    if opkg list-installed | grep -q "$package"; then
+        echo "$package is already installed."
     else
-        echo "Package $package not found in $PACKAGES_DIR. Attempting to download..."
-        opkg install $package || exit_on_error "Failed to download and install $package"
+        if [ -f "$PACKAGES_DIR/${package}_${version}_mipsel-3.4.ipk" ]; then
+            echo "Installing specific version of $package from local file."
+            opkg install "$PACKAGES_DIR/${package}_${version}_mipsel-3.4.ipk" || exit_on_error "Failed to install $package from local file"
+        else
+            echo "Specific version of $package not found locally. Checking Entware repository..."
+            if opkg install "${package}=${version}"; then
+                echo "Installed specific version of $package from Entware repository."
+            else
+                echo "Specific version of $package not found in Entware repository. Installing latest version..."
+                opkg install $package || exit_on_error "Failed to install $package"
+            fi
+        fi
     fi
-done < ipk-packages.txt
+done
 
 # Install Python packages
 echo "Installing Python packages..."
