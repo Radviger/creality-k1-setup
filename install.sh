@@ -96,16 +96,6 @@ fi
 echo "Installing Nginx..."
 opkg install nginx || exit_on_error "Failed to install Nginx"
 
-# Install Mainsail
-echo "Installing Mainsail..."
-MAINSAIL_DIR="$WORKING_DIR/mainsail"
-if [ ! -d "$MAINSAIL_DIR" ]; then
-    mkdir -p $MAINSAIL_DIR || exit_on_error "Failed to create directory $MAINSAIL_DIR"
-fi
-cd $MAINSAIL_DIR || exit_on_error "Failed to change directory to $MAINSAIL_DIR"
-git clone https://github.com/mainsail-crew/mainsail.git || exit_on_error "Failed to download Mainsail"
-
-
 # Install Moonraker
 echo "Installing Moonraker..."
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
@@ -119,12 +109,26 @@ git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR || exit_on_err
 cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR"
 ./scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
 
+# Install Mainsail
+echo "Installing Mainsail..."
+MAINSAIL_DIR="$WORKING_DIR/mainsail"
+if [ -d "$MAINSAIL_DIR" ]; then
+    echo "Mainsail directory already exists. Deleting..."
+    rm -rf $MAINSAIL_DIR || exit_on_error "Failed to delete directory $MAINSAIL_DIR"
+fi
+mkdir -p $MAINSAIL_DIR || exit_on_error "Failed to create directory $MAINSAIL_DIR"
+cd $MAINSAIL_DIR || exit_on_error "Failed to change directory to $MAINSAIL_DIR"
+git clone https://github.com/mainsail-crew/mainsail.git || exit_on_error "Failed to download Mainsail"
+
+
 # Install Fluidd
 echo "Installing Fluidd..."
 FLUIDD_DIR="$WORKING_DIR/fluidd"
-if [ ! -d "$FLUIDD_DIR" ]; then
-    mkdir -p $FLUIDD_DIR || exit_on_error "Failed to create directory $FLUIDD_DIR"
+if [ -d "$FLUIDD_DIR" ]; then
+    echo "Fluidd directory already exists. Deleting..."
+    rm -rf $FLUIDD_DIR || exit_on_error "Failed to delete directory $FLUIDD_DIR"
 fi
+mkdir -p $FLUIDD_DIR || exit_on_error "Failed to create directory $FLUIDD_DIR"
 cd $FLUIDD_DIR || exit_on_error "Failed to change directory to $FLUIDD_DIR"
 git clone https://github.com/fluidd-core/fluidd.git || exit_on_error "Failed to download Fluidd"
 
