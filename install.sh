@@ -1,35 +1,16 @@
 #!/bin/sh
 
-# Function to check if a file exists, download if not
-download_if_not_exists() {
-  local url=$1
-  local file=$2
-
-  if [ ! -f "$file" ]; then
-    echo "Downloading $file from $url"
-    wget -q --show-progress $url -O $file
-    if [ $? -ne 0 ]; then
-      echo "Failed to download $file"
-      exit 1
-    fi
-  else
-    echo "$file already exists, skipping download"
-  fi
-}
+# Check if connected to the internet
+ping -c 1 google.com > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "No internet connection. Please download the necessary packages manually. See the text files (ipk-packages.txt and requirements.txt) for the list of packages."
+  exit 1
+fi
 
 # Set the working directory
 WORKING_DIR="/usr/data"
 PACKAGES_DIR="$WORKING_DIR/packages"
 CONFIG_DIR="$WORKING_DIR/config"
-IPK_PACKAGES_FILE="ipk-packages.txt"
-REQUIREMENTS_FILE="requirements.txt"
-
-# Check if connected to the internet
-ping -c 1 google.com > /dev/null 2>&1
-if [ $? -ne 0 ]; then
-  echo "No internet connection. Please download the necessary packages manually. See the text files ($IPK_PACKAGES_FILE and $REQUIREMENTS_FILE) for the list of packages."
-  exit 1
-fi
 
 # Backup existing printer.cfg
 PRINTER_CFG="/usr/data/printer_data/config/printer.cfg"
@@ -61,63 +42,45 @@ fi
 # Install IPK packages using Entware
 echo "Installing IPK packages..."
 while read -r package; do
-  if [ -f "$PACKAGES_DIR/$package" ]; then
-    opkg install "$PACKAGES_DIR/$package"
-  else
-    echo "Package $package not found in $PACKAGES_DIR, attempting to download..."
-    download_if_not_exists "http://bin.entware.net/mipselsf-k3.4/$package" "$PACKAGES_DIR/$package"
-    opkg install "$PACKAGES_DIR/$package"
-  fi
-done < $IPK_PACKAGES_FILE
+  opkg install "$PACKAGES_DIR/$package"
+done < ipk-packages.txt
 
 # Install Python packages
 echo "Installing Python packages..."
-pip3 install --no-index --find-links=$PACKAGES_DIR -r $REQUIREMENTS_FILE || { echo "Failed to install some Python packages"; exit 1; }
+pip3 install --no-index --find-links=$PACKAGES_DIR -r requirements.txt
 
 # Install Nginx
 echo "Installing Nginx..."
-opkg install nginx || { echo "Failed to install Nginx"; exit 1; }
+opkg install nginx
 
 # Install Mainsail
 echo "Installing Mainsail..."
 MAINSIAL_DIR="$WORKING_DIR/mainsail"
 mkdir -p $MAINSIAL_DIR
 cd $MAINSIAL_DIR
-if ! wget https://github.com/meteyou/mainsail/releases/latest/download/mainsail.zip; then
-  echo "Failed to download Mainsail. Please ensure you have an internet connection or download the file manually."
-  exit 1
-fi
-unzip mainsail.zip || { echo "Failed to unzip Mainsail"; exit 1; }
+wget https://github.com/meteyou/mainsail/releases/latest/download/mainsail.zip
+unzip mainsail.zip
 rm mainsail.zip
 
 # Install Moonraker
 echo "Installing Moonraker..."
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
 cd $WORKING_DIR
-if ! git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR; then
-  echo "Failed to clone Moonraker. Please ensure you have an internet connection."
-  exit 1
-fi
+git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR
 cd $MOONRAKER_DIR
-./scripts/install-moonraker.sh || { echo "Failed to install Moonraker"; exit 1; }
+./scripts/install-moonraker.sh
 
 # Install Fluidd
 echo "Installing Fluidd..."
 FLUIDD_DIR="$WORKING_DIR/fluidd"
 mkdir -p $FLUIDD_DIR
 cd $FLUIDD_DIR
-if ! wget https://github.com/cadriel/fluidd/releases/latest/download/fluidd.zip; then
-  echo "Failed to download Fluidd. Please ensure you have an internet connection or download the file manually."
-  exit 1
-fi
-unzip fluidd.zip || { echo "Failed to unzip Fluidd"; exit 1; }
+wget https://github.com/cadriel/fluidd/releases/latest/download/fluidd.zip
+unzip fluidd.zip
 rm fluidd.zip
 
 # Configure Nginx for Mainsail and Fluidd
 echo "Configuring Nginx..."
-if [ ! -d /opt/etc/nginx ]; then
-    mkdir -p /opt/etc/nginx
-fi
 cat <<EOF > /opt/etc/nginx/nginx.conf
 server {
     listen 8081;
@@ -150,15 +113,11 @@ EOF
 
 # Restart Nginx
 echo "Restarting Nginx..."
-/opt/etc/init.d/S80nginx restart || { echo "Failed to restart Nginx"; exit 1; }
+/opt/etc/init.d/S80nginx restart
 
 # Start Moonraker
 echo "Starting Moonraker..."
-if command -v systemctl > /dev/null; then
-    systemctl start moonraker || { echo "Failed to start Moonraker"; exit 1; }
-    systemctl enable moonraker || { echo "Failed to enable Moonraker"; exit 1; }
-else
-    echo "Systemctl not found. Please start Moonraker manually."
-fi
+/opt/etc/init.d/S80moonraker start
+/opt/etc/init.d/S80moonraker enable
 
 echo "Installation complete! Mainsail is running on port 8081 and Fluidd on port 8082."
