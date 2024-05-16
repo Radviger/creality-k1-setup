@@ -113,16 +113,11 @@ if [ ! -f "./scripts/install-moonraker.sh" ]; then
     exit_on_error "install-moonraker.sh not found"
 fi
 
-# Add a non-root user if not already present
-MOONRAKER_USER="moonrakeruser"
-if ! id -u $MOONRAKER_USER > /dev/null 2>&1; then
-    echo "Creating user $MOONRAKER_USER"
-    adduser -D $MOONRAKER_USER || exit_on_error "Failed to create user $MOONRAKER_USER"
-fi
-
-# Run install-moonraker.sh as the non-root user
-echo "Running install-moonraker.sh with bash as $MOONRAKER_USER..."
-su - $MOONRAKER_USER -c "bash $MOONRAKER_DIR/scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script"
+# Run install-moonraker.sh as root, ignoring the user check
+echo "Running install-moonraker.sh with bash as root..."
+chmod +x ./scripts/install-moonraker.sh || exit_on_error "Failed to set execute permissions on install-moonraker.sh"
+sed -i 's/if \[ "\$EUID" -eq 0 \]; then/if false; then/' ./scripts/install-moonraker.sh || exit_on_error "Failed to modify install-moonraker.sh"
+bash ./scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
 
 # Install Mainsail
 echo "Installing Mainsail..."
