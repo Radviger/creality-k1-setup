@@ -11,3 +11,4 @@ libopcodes_2.41-1_mipsel-3.4.ipk
 libintl-full_0.21.1-2_mipsel-3.4.ipk
 wget_1.21.1-1_mipsel-3.4.ipk
 curl_8.6.0-1_mipsel-3.4.ipk
+sudo_1.8.31-1_mipsel-3.4.ipk

@@ -52,7 +52,7 @@ else
 fi
 
 # List of packages and their versions
-packages_versions="python3-lib2to3-3.11.7-1 libzstd-1.5.5-1 python3-dev-3.11.7-1 make-4.4.1-1 gcc-8.4.0-5c binutils-2.41-1 ar-2.41-1 objdump-2.41-1 libbfd-2.41-1 libopcodes-2.41-1 libintl-full-0.21.1-2 wget-1.21.1-1 curl-8.6.0-1"
+packages_versions="python3-lib2to3-3.11.7-1 libzstd-1.5.5-1 python3-dev-3.11.7-1 make-4.4.1-1 gcc-8.4.0-5c binutils-2.41-1 ar-2.41-1 objdump-2.41-1 libbfd-2.41-1 libopcodes-2.41-1 libintl-full-0.21.1-2 wget-1.21.1-1 curl-8.6.0-1 sudo-1.8.31-1"
 
 # Install IPK packages using Entware
 echo "Installing IPK packages..."
@@ -96,6 +96,17 @@ fi
 echo "Installing Nginx..."
 opkg install nginx || exit_on_error "Failed to install Nginx"
 
+# Create a new user for Moonraker
+MOONRAKER_USER="moonrakeruser"
+echo "Creating user $MOONRAKER_USER..."
+if ! id -u $MOONRAKER_USER > /dev/null 2>&1; then
+    adduser -h /home/$MOONRAKER_USER -D $MOONRAKER_USER || exit_on_error "Failed to create user $MOONRAKER_USER"
+    mkdir -p /home/$MOONRAKER_USER || exit_on_error "Failed to create home directory for $MOONRAKER_USER"
+    chown -R $MOONRAKER_USER:$MOONRAKER_USER /home/$MOONRAKER_USER || exit_on_error "Failed to set ownership for home directory"
+else
+    echo "User $MOONRAKER_USER already exists."
+fi
+
 # Install Moonraker
 echo "Installing Moonraker..."
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
@@ -118,14 +129,10 @@ echo "Modifying install-moonraker.sh to work without sudo and apt-get..."
 sed -i 's/sudo //g' ./scripts/install-moonraker.sh
 sed -i '/apt-get/d' ./scripts/install-moonraker.sh
 
-# Additional modifications to ensure it does not run as root
-sed -i 's/if \[ "$EUID" -eq 0 \]; then/if \[ "$EUID" -eq 0 \]; then\n  echo "Running as root is allowed";/' ./scripts/install-moonraker.sh
-
-# Run install-moonraker.sh with bash
-echo "Running install-moonraker.sh with bash as root..."
-chmod +x ./scripts/install-moonraker.sh || exit_on_error "Failed to set execute permissions on install-moonraker.sh"
-bash ./scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
-
+# Run install-moonraker.sh with bash as moonrakeruser
+echo "Running install-moonraker.sh with bash as $MOONRAKER_USER..."
+chown -R $MOONRAKER_USER:$MOONRAKER_USER $MOONRAKER_DIR || exit_on_error "Failed to set ownership for Moonraker directory"
+su - $MOONRAKER_USER -c "bash $MOONRAKER_DIR/scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script as $MOONRAKER_USER"
 
 # Install Mainsail
 echo "Installing Mainsail..."
@@ -136,7 +143,7 @@ if [ -d "$MAINSAIL_DIR" ]; then
 fi
 mkdir -p $MAINSAIL_DIR || exit_on_error "Failed to create directory $MAINSAIL_DIR"
 cd $MAINSAIL_DIR || exit_on_error "Failed to change directory to $MAINSAIL_DIR"
-git clone https://github.com/mainsail-crew/mainsail.git . || exit_on_error "Failed to download Mainsail"
+git clone https://github.com/mainsail-crew/mainsail.git || exit_on_error "Failed to download Mainsail"
 
 # Install Fluidd
 echo "Installing Fluidd..."
@@ -147,7 +154,7 @@ if [ -d "$FLUIDD_DIR" ]; then
 fi
 mkdir -p $FLUIDD_DIR || exit_on_error "Failed to create directory $FLUIDD_DIR"
 cd $FLUIDD_DIR || exit_on_error "Failed to change directory to $FLUIDD_DIR"
-git clone https://github.com/fluidd-core/fluidd.git . || exit_on_error "Failed to download Fluidd"
+git clone https://github.com/fluidd-core/fluidd.git || exit_on_error "Failed to download Fluidd"
 
 # Configure Nginx for Mainsail and Fluidd
 echo "Configuring Nginx..."
