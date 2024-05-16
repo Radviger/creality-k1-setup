@@ -108,6 +108,7 @@ cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR
 git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR || exit_on_error "Failed to clone Moonraker"
 cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR"
 dos2unix ./scripts/install-moonraker.sh || exit_on_error "Failed to convert line endings"
+chmod +x ./scripts/install-moonraker.sh || exit_on_error "Failed to set execute permissions on install-moonraker.sh"
 ./scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
 
 # Install Mainsail
