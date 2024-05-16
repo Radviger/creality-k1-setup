@@ -68,8 +68,11 @@ pip3 install --no-index --find-links=$PACKAGES_DIR -r requirements.txt || echo "
 pip3 install --no-cache-dir -r requirements_pypi.txt || echo "Failed to install Python packages from PyPI"
 
 # Check for Python version compatibility
-python_version=$(python3 -c 'import sys; print(sys.version_info[:])')
-if [ "$python_version" \< "(3,6)" ]; then
+python_version=$(python3 -c 'import sys; print(sys.version_info.major, sys.version_info.minor)')
+major_version=$(echo $python_version | cut -d' ' -f1)
+minor_version=$(echo $python_version | cut -d' ' -f2)
+
+if [ $major_version -lt 3 ] || [ $major_version -eq 3 -a $minor_version -lt 6 ]; then
     exit_on_error "Python version is not compatible. Please upgrade to Python 3.6 or later."
 fi
 
