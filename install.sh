@@ -46,42 +46,24 @@ else
     exit_on_error "No printer.cfg found to copy."
 fi
 
-# List of packages and their versions
-packages_versions="python3-lib2to3-3.11.7-1 libzstd-1.5.5-1 python3-dev-3.11.7-1 make-4.4.1-1 gcc-8.4.0-5c binutils-2.41-1 ar-2.41-1 objdump-2.41-1 libbfd-2.41-1 libopcodes-2.41-1 libintl-full-0.21.1-2 wget-1.21.1-1 curl-8.6.0-1 sudo-1.8.31-1 bash-5.2.15-1 python3-virtualenv-20.0.33-1 libopenjp2-2.3.1-1 libsodium-1.0.18-1 zlib-1.2.11-3 libjpeg-9c-1 packagekit-1.1.12-1 wireless-tools-30.pre9-1"
+# Essential packages list
+packages="python3 libzstd make gcc binutils ar objdump libbfd libopcodes libintl-full wget curl sudo bash"
 
 # Install IPK packages using Entware
 echo "Installing IPK packages..."
-for package_version in $packages_versions
-do
-    package=$(echo $package_version | cut -d'-' -f1)
-    version=$(echo $package_version | cut -d'-' -f2-)
+for package in $packages; do
     if opkg list-installed | grep -q "$package"; then
         echo "$package is already installed."
     else
-        if [ -f "$PACKAGES_DIR/${package}_${version}_mipsel-3.4.ipk" ]; then
-            echo "Installing specific version of $package from local file."
-            opkg install "$PACKAGES_DIR/${package}_${version}_mipsel-3.4.ipk" || exit_on_error "Failed to install $package from local file"
+        if [ -f "$PACKAGES_DIR/${package}_*.ipk" ]; then
+            echo "Installing $package from local file."
+            opkg install "$PACKAGES_DIR/${package}_*.ipk" || exit_on_error "Failed to install $package from local file"
         else
-            echo "Specific version of $package not found locally. Checking Entware repository..."
-            if opkg install "${package}=${version}"; then
-                echo "Installed specific version of $package from Entware repository."
-            else
-                echo "Specific version of $package not found in Entware repository. Installing latest version..."
-                opkg install $package || exit_on_error "Failed to install $package"
-            fi
+            echo "Installing $package from Entware repository..."
+            opkg install $package || exit_on_error "Failed to install $package"
         fi
     fi
 done
-
-# Install IPK packages without version numbers
-while read -r package; do
-    if opkg list-installed | grep -q "$package"; then
-        echo "$package is already installed."
-    else
-        echo "Installing latest version of $package from Entware repository..."
-        opkg install $package || exit_on_error "Failed to install $package"
-    fi
-done < ipk-packages-no-version.txt
 
 # Install Python packages
 echo "Installing Python packages..."
