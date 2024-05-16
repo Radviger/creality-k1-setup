@@ -109,12 +109,13 @@ git clone https://github.com/mainsail-crew/mainsail.git || exit_on_error "Failed
 # Install Moonraker
 echo "Installing Moonraker..."
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
-if [ ! -d "$MOONRAKER_DIR" ]; then
-    cd $WORKING_DIR || exit_on_error "Failed to change directory to $WORKING_DIR"
-    git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR || exit_on_error "Failed to clone Moonraker"
-else
-    echo "Moonraker directory already exists."
+if [ -d "$MOONRAKER_DIR" ]; then
+    echo "Moonraker directory already exists. Deleting..."
+    rm -rf $MOONRAKER_DIR || exit_on_error "Failed to delete directory $MOONRAKER_DIR"
 fi
+mkdir -p $MOONRAKER_DIR || exit_on_error "Failed to create directory $MOONRAKER_DIR"
+cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR"
+git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR || exit_on_error "Failed to clone Moonraker"
 cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR"
 ./scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
 
