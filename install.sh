@@ -65,7 +65,7 @@ done < ipk-packages.txt
 # Install Python packages
 echo "Installing Python packages..."
 pip3 install --no-index --find-links=$PACKAGES_DIR -r requirements.txt || echo "Failed to install Python packages from $PACKAGES_DIR. Attempting to install from PyPI..."
-pip3 install -r requirements.txt || exit_on_error "Failed to install Python packages from PyPI"
+pip3 install --no-cache-dir -r requirements_pypi.txt || echo "Failed to install Python packages from PyPI"
 
 # Check for Python version compatibility
 python_version=$(python3 -c 'import sys; print(sys.version_info[:])')
