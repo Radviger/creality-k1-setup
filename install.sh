@@ -138,6 +138,13 @@ if [ -z "$BASH_PATH" ]; then
     opkg install bash || exit_on_error "Failed to install bash"
 fi
 
+# Install virtualenv if not available
+pip3 show virtualenv > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "virtualenv is not installed. Installing virtualenv from PyPI..."
+    pip3 install virtualenv || exit_on_error "Failed to install virtualenv from PyPI"
+fi
+
 # Run install-moonraker.sh with bash as moonrakeruser
 echo "Running install-moonraker.sh with bash as moonrakeruser..."
 su moonrakeruser -c "bash ./scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script as moonrakeruser"
@@ -151,7 +158,7 @@ if [ -d "$MAINSAIL_DIR" ]; then
 fi
 mkdir -p $MAINSAIL_DIR || exit_on_error "Failed to create directory $MAINSAIL_DIR"
 cd $MAINSAIL_DIR || exit_on_error "Failed to change directory to $MAINSAIL_DIR"
-git clone https://github.com/mainsail-crew/mainsail.git || exit_on_error "Failed to download Mainsail"
+git clone https://github.com/mainsail-crew/mainsail.git . || exit_on_error "Failed to download Mainsail"
 
 # Install Fluidd
 echo "Installing Fluidd..."
@@ -162,7 +169,7 @@ if [ -d "$FLUIDD_DIR" ]; then
 fi
 mkdir -p $FLUIDD_DIR || exit_on_error "Failed to create directory $FLUIDD_DIR"
 cd $FLUIDD_DIR || exit_on_error "Failed to change directory to $FLUIDD_DIR"
-git clone https://github.com/fluidd-core/fluidd.git || exit_on_error "Failed to download Fluidd"
+git clone https://github.com/fluidd-core/fluidd.git . || exit_on_error "Failed to download Fluidd"
 
 # Configure Nginx for Mainsail and Fluidd
 echo "Configuring Nginx..."
