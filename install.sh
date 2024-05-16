@@ -105,7 +105,7 @@ if [ -d "$MOONRAKER_DIR" ]; then
 fi
 mkdir -p $MOONRAKER_DIR || exit_on_error "Failed to create directory $MOONRAKER_DIR"
 cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR"
-git clone https://github.com/Arksine/moonraker.git . || exit_on_error "Failed to clone Moonraker"
+git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR || exit_on_error "Failed to clone Moonraker"
 cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR"
 dos2unix ./scripts/install-moonraker.sh || exit_on_error "Failed to convert line endings"
 ./scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
