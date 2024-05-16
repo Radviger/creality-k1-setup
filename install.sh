@@ -112,8 +112,8 @@ ls -l ./scripts/
 if [ ! -f "./scripts/install-moonraker.sh" ]; then
     exit_on_error "install-moonraker.sh not found"
 fi
-echo "Sourcing install-moonraker.sh..."
-. ./scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
+echo "Running install-moonraker.sh with bash..."
+bash ./scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
 
 # Install Mainsail
 echo "Installing Mainsail..."
