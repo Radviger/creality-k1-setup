@@ -103,7 +103,7 @@ if [ ! -d "$MAINSAIL_DIR" ]; then
     mkdir -p $MAINSAIL_DIR || exit_on_error "Failed to create directory $MAINSAIL_DIR"
 fi
 cd $MAINSAIL_DIR || exit_on_error "Failed to change directory to $MAINSAIL_DIR"
-clone https://github.com/mainsail-crew/mainsail.git || exit_on_error "Failed to download Mainsail"
+git clone https://github.com/mainsail-crew/mainsail.git || exit_on_error "Failed to download Mainsail"
 
 
 # Install Moonraker
