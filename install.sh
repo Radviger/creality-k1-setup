@@ -14,6 +14,11 @@ else
     echo "Internet connection verified."
 fi
 
+# Check for sufficient disk space (1GB in this example)
+if [ $(df --output=avail "$PWD" | tail -n1) -lt 1000000 ]; then
+    exit_on_error "Not enough disk space. Please free up some space and try again."
+fi
+
 # Set the working directory
 WORKING_DIR="/usr/data"
 PACKAGES_DIR="$WORKING_DIR/packages"
@@ -27,7 +32,7 @@ if [ -f "$PRINTER_CFG" ]; then
     echo "Backing up existing printer.cfg to $BACKUP_PRINTER_CFG"
     cp "$PRINTER_CFG" "$BACKUP_PRINTER_CFG" || exit_on_error "Failed to backup printer.cfg"
 else
-    exit_on_error "No existing printer.cfg found to backup."
+    echo "No existing printer.cfg found to backup."
 fi
 
 # Ensure printer.cfg is accessible
@@ -59,7 +64,14 @@ done < ipk-packages.txt
 
 # Install Python packages
 echo "Installing Python packages..."
-pip3 install --no-index --find-links=$PACKAGES_DIR -r requirements.txt || exit_on_error "Failed to install Python packages from requirements.txt"
+pip3 install --no-index --find-links=$PACKAGES_DIR -r requirements.txt || echo "Failed to install Python packages from $PACKAGES_DIR. Attempting to install from PyPI..."
+pip3 install -r requirements.txt || exit_on_error "Failed to install Python packages from PyPI"
+
+# Check for Python version compatibility
+python_version=$(python3 -c 'import sys; print(sys.version_info[:])')
+if [ "$python_version" \< "(3,6)" ]; then
+    exit_on_error "Python version is not compatible. Please upgrade to Python 3.6 or later."
+fi
 
 # Install Nginx
 echo "Installing Nginx..."
@@ -67,11 +79,11 @@ opkg install nginx || exit_on_error "Failed to install Nginx"
 
 # Install Mainsail
 echo "Installing Mainsail..."
-MAINSIAL_DIR="$WORKING_DIR/mainsail"
-if [ ! -d "$MAINSIAL_DIR" ]; then
-    mkdir -p $MAINSIAL_DIR || exit_on_error "Failed to create directory $MAINSIAL_DIR"
+MAINSAIL_DIR="$WORKING_DIR/mainsail"
+if [ ! -d "$MAINSAIL_DIR" ]; then
+    mkdir -p $MAINSAIL_DIR || exit_on_error "Failed to create directory $MAINSAIL_DIR"
 fi
-cd $MAINSIAL_DIR || exit_on_error "Failed to change directory to $MAINSIAL_DIR"
+cd $MAINSAIL_DIR || exit_on_error "Failed to change directory to $MAINSAIL_DIR"
 wget https://github.com/meteyou/mainsail/releases/latest/download/mainsail.zip || exit_on_error "Failed to download Mainsail"
 unzip mainsail.zip || exit_on_error "Failed to unzip mainsail.zip"
 rm mainsail.zip || exit_on_error "Failed to remove mainsail.zip"
@@ -101,13 +113,13 @@ rm fluidd.zip || exit_on_error "Failed to remove fluidd.zip"
 
 # Configure Nginx for Mainsail and Fluidd
 echo "Configuring Nginx..."
-cat <<EOF > /opt/etc/nginx/nginx.conf || exit_on_error "Failed to write Nginx configuration"
+cat <<EOF > /opt/etc/nginx/nginx.conf
 server {
     listen 8081;
     server_name _;
 
     location / {
-        root $MAINSIAL_DIR;
+        root $MAINSAIL_DIR;
         try_files \$uri \$uri/ /index.html;
     }
 }
@@ -130,6 +142,10 @@ server {
     }
 }
 EOF
+
+if [ $? -ne 0 ]; then
+    exit_on_error "Failed to write Nginx configuration"
+fi
 
 # Restart Nginx
 echo "Restarting Nginx..."
