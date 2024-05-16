@@ -1,16 +1,35 @@
 #!/bin/sh
 
-# Check if connected to the internet
-ping -c 1 google.com > /dev/null 2>&1
-if [ $? -ne 0 ]; then
-  echo "No internet connection. Please download the necessary packages manually. See the text files (ipk-packages.txt and requirements.txt) for the list of packages."
-  exit 1
-fi
+# Function to check if a file exists, download if not
+download_if_not_exists() {
+  local url=$1
+  local file=$2
+
+  if [ ! -f "$file" ]; then
+    echo "Downloading $file from $url"
+    wget -q --show-progress $url -O $file
+    if [ $? -ne 0 ]; then
+      echo "Failed to download $file"
+      exit 1
+    fi
+  else
+    echo "$file already exists, skipping download"
+  fi
+}
 
 # Set the working directory
 WORKING_DIR="/usr/data"
 PACKAGES_DIR="$WORKING_DIR/packages"
 CONFIG_DIR="$WORKING_DIR/config"
+IPK_PACKAGES_FILE="ipk-packages.txt"
+REQUIREMENTS_FILE="requirements.txt"
+
+# Check if connected to the internet
+ping -c 1 google.com > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "No internet connection. Please download the necessary packages manually. See the text files ($IPK_PACKAGES_FILE and $REQUIREMENTS_FILE) for the list of packages."
+  exit 1
+fi
 
 # Backup existing printer.cfg
 PRINTER_CFG="/usr/data/printer_data/config/printer.cfg"
@@ -45,13 +64,15 @@ while read -r package; do
   if [ -f "$PACKAGES_DIR/$package" ]; then
     opkg install "$PACKAGES_DIR/$package"
   else
-    echo "Package $package not found in $PACKAGES_DIR"
+    echo "Package $package not found in $PACKAGES_DIR, attempting to download..."
+    download_if_not_exists "http://bin.entware.net/mipselsf-k3.4/$package" "$PACKAGES_DIR/$package"
+    opkg install "$PACKAGES_DIR/$package"
   fi
-done < ipk-packages.txt
+done < $IPK_PACKAGES_FILE
 
 # Install Python packages
 echo "Installing Python packages..."
-pip3 install --no-index --find-links=$PACKAGES_DIR -r requirements.txt || { echo "Failed to install some Python packages"; exit 1; }
+pip3 install --no-index --find-links=$PACKAGES_DIR -r $REQUIREMENTS_FILE || { echo "Failed to install some Python packages"; exit 1; }
 
 # Install Nginx
 echo "Installing Nginx..."
