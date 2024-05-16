@@ -51,18 +51,21 @@ done < ipk-packages.txt
 
 # Install Python packages
 echo "Installing Python packages..."
-pip3 install --no-index --find-links=$PACKAGES_DIR -r requirements.txt
+pip3 install --no-index --find-links=$PACKAGES_DIR -r requirements.txt || { echo "Failed to install some Python packages"; exit 1; }
 
 # Install Nginx
 echo "Installing Nginx..."
-opkg install nginx
+opkg install nginx || { echo "Failed to install Nginx"; exit 1; }
 
 # Install Mainsail
 echo "Installing Mainsail..."
 MAINSIAL_DIR="$WORKING_DIR/mainsail"
 mkdir -p $MAINSIAL_DIR
 cd $MAINSIAL_DIR
-wget https://github.com/meteyou/mainsail/releases/latest/download/mainsail.zip || { echo "Failed to download Mainsail"; exit 1; }
+if ! wget https://github.com/meteyou/mainsail/releases/latest/download/mainsail.zip; then
+  echo "Failed to download Mainsail. Please ensure you have an internet connection or download the file manually."
+  exit 1
+fi
 unzip mainsail.zip || { echo "Failed to unzip Mainsail"; exit 1; }
 rm mainsail.zip
 
@@ -70,7 +73,10 @@ rm mainsail.zip
 echo "Installing Moonraker..."
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
 cd $WORKING_DIR
-git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR || { echo "Failed to clone Moonraker"; exit 1; }
+if ! git clone https://github.com/Arksine/moonraker.git $MOONRAKER_DIR; then
+  echo "Failed to clone Moonraker. Please ensure you have an internet connection."
+  exit 1
+fi
 cd $MOONRAKER_DIR
 ./scripts/install-moonraker.sh || { echo "Failed to install Moonraker"; exit 1; }
 
@@ -79,12 +85,18 @@ echo "Installing Fluidd..."
 FLUIDD_DIR="$WORKING_DIR/fluidd"
 mkdir -p $FLUIDD_DIR
 cd $FLUIDD_DIR
-wget https://github.com/cadriel/fluidd/releases/latest/download/fluidd.zip || { echo "Failed to download Fluidd"; exit 1; }
+if ! wget https://github.com/cadriel/fluidd/releases/latest/download/fluidd.zip; then
+  echo "Failed to download Fluidd. Please ensure you have an internet connection or download the file manually."
+  exit 1
+fi
 unzip fluidd.zip || { echo "Failed to unzip Fluidd"; exit 1; }
 rm fluidd.zip
 
 # Configure Nginx for Mainsail and Fluidd
 echo "Configuring Nginx..."
+if [ ! -d /opt/etc/nginx ]; then
+    mkdir -p /opt/etc/nginx
+fi
 cat <<EOF > /opt/etc/nginx/nginx.conf
 server {
     listen 8081;
@@ -121,7 +133,11 @@ echo "Restarting Nginx..."
 
 # Start Moonraker
 echo "Starting Moonraker..."
-systemctl start moonraker || { echo "Failed to start Moonraker"; exit 1; }
-systemctl enable moonraker || { echo "Failed to enable Moonraker"; exit 1; }
+if command -v systemctl > /dev/null; then
+    systemctl start moonraker || { echo "Failed to start Moonraker"; exit 1; }
+    systemctl enable moonraker || { echo "Failed to enable Moonraker"; exit 1; }
+else
+    echo "Systemctl not found. Please start Moonraker manually."
+fi
 
 echo "Installation complete! Mainsail is running on port 8081 and Fluidd on port 8082."
