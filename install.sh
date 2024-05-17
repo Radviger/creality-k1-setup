@@ -132,6 +132,15 @@ verify_and_install_whl_files \
     "jinja2-3.1.4-py3-none-any.whl" \
     "watchdog-2.1.9-py3-none-any.whl"
 
+# Ensure necessary system libraries are installed
+install_system_libraries() {
+    echo "Installing necessary system libraries..."
+    opkg update
+    opkg install libsodium libjpeg zlib || exit_on_error "Failed to install necessary system libraries"
+}
+
+install_system_libraries
+
 # Install required dependencies from source or alternative methods
 install_from_source_or_alternative() {
     echo "Attempting to install $1 from source or alternative method..."
@@ -150,7 +159,7 @@ install_from_source_or_alternative() {
             pip3 install pillow || exit_on_error "Failed to install pillow (includes support for openjp2)"
             ;;
         libsodium-dev)
-            pip3 install pynacl || exit_on_error "Failed to install pynacl"
+            pip3 install libnacl || warn "Failed to install libnacl, this might impact functionality depending on its usage"
             ;;
         zlib1g-dev)
             # Typically part of the Python standard library, ensuring zlib is available
