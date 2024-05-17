@@ -13,6 +13,11 @@ exit_on_error() {
 WORKING_DIR="/usr/data"
 PACKAGES_DIR="$WORKING_DIR/packages"
 
+# Ensure the directories exist
+if [ ! -d "$PACKAGES_DIR/python" ]; then
+    exit_on_error "The directory $PACKAGES_DIR/python does not exist. Please create it and add the required .whl files."
+fi
+
 # Essential packages list
 packages="python3 libzstd make gcc binutils ar objdump libbfd libopcodes libintl-full wget curl sudo bash"
 

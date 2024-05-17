@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# MJ: This script performs the initial setup by checking the internet connection, 
-# setting up working directories, backing up, and ensuring the printer.cfg file. 
+# MJ: This script performs the initial setup by checking the internet connection,
+# setting up working directories, backing up, and ensuring the printer.cfg file.
 # It also triggers the verification and service start scripts.
 
 # Function to print and exit on error
@@ -22,6 +22,42 @@ fi
 WORKING_DIR="/usr/data"
 PACKAGES_DIR="$WORKING_DIR/packages"
 CONFIG_DIR="$WORKING_DIR/config"
+
+# Create necessary directories if they don't exist
+mkdir -p "$PACKAGES_DIR/python" || exit_on_error "Failed to create directory $PACKAGES_DIR/python"
+mkdir -p "$PACKAGES_DIR/ipk" || exit_on_error "Failed to create directory $PACKAGES_DIR/ipk"
+
+# Verify that the required .whl files exist
+required_whl_files=(
+    "zipp-3.18.1-py3-none-any.whl"
+    "typing_extensions-4.11.0-py3-none-any.whl"
+    "tomli-2.0.1-py3-none-any.whl"
+    "setuptools_scm-8.1.0-py3-none-any.whl"
+    "importlib_metadata-7.1.0-py3-none-any.whl"
+    "Markdown-3.6-py3-none-any.whl"
+    "mkdocs-1.6.0-py3-none-any.whl"
+    "mergedeep-1.3.4-py3-none-any.whl"
+    "packaging-24.0-py3-none-any.whl"
+    "jinja2-3.1.4-py3-none-any.whl"
+    "watchdog-4.0.0-py3-none-manylinux2014_armv7l.whl"
+)
+
+for file in "${required_whl_files[@]}"; do
+    if [ ! -f "$PACKAGES_DIR/python/$file" ]; then
+        exit_on_error "Required file $file not found in $PACKAGES_DIR/python"
+    fi
+done
+
+# Verify that the required .ipk files exist (assuming these files are listed in ipk-packages.txt)
+if [ -f "requirements/ipk-packages.txt" ]; then
+    while IFS= read -r ipk_file; do
+        if [ ! -f "$PACKAGES_DIR/ipk/$ipk_file" ]; then
+            exit_on_error "Required file $ipk_file not found in $PACKAGES_DIR/ipk"
+        fi
+    done < requirements/ipk-packages.txt
+else
+    exit_on_error "File requirements/ipk-packages.txt not found"
+fi
 
 # Backup existing printer.cfg
 PRINTER_CFG="/usr/data/printer_data/config/printer.cfg"
