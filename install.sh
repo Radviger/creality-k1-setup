@@ -54,6 +54,13 @@ fi
 echo "Running verification script..."
 sh scripts/verify_packages.sh || exit_on_error "Failed to run verification script"
 
+# Ensure virtualenv is installed
+pip3 show virtualenv > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "virtualenv is not installed. Installing virtualenv from PyPI..."
+    pip3 install virtualenv || exit_on_error "Failed to install virtualenv from PyPI"
+fi
+
 # Trigger the service start script
 echo "Running service start script..."
 sh scripts/start_services.sh || exit_on_error "Failed to run service start script"

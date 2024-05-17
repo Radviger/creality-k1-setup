@@ -9,3 +9,13 @@ mergedeep==1.3.4
 packaging==24.0
 jinja2==3.1.4
 watchdog==4.0.0
+python3-virtualenv
+python3-dev
+liblmdb-dev
+libopenjp2-7
+libsodium-dev
+zlib1g-dev
+libjpeg-dev
+packagekit
+wireless-tools
+curl
