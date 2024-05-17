@@ -23,11 +23,21 @@ WORKING_DIR="/usr/data"
 PACKAGES_DIR="$WORKING_DIR/packages"
 CONFIG_DIR="$WORKING_DIR/config"
 
-# Create necessary directories if they don't exist
-mkdir -p "$PACKAGES_DIR/python" || exit_on_error "Failed to create directory $PACKAGES_DIR/python"
-mkdir -p "$PACKAGES_DIR/ipk" || exit_on_error "Failed to create directory $PACKAGES_DIR/ipk"
+# Verify that the 'packages' directory exists
+if [ ! -d "$PACKAGES_DIR" ]; then
+    exit_on_error "The directory $PACKAGES_DIR does not exist. Please ensure the repository is cloned correctly."
+fi
 
-# Verify that the required .whl files exist
+# Verify that the 'python' and 'ipk' directories exist under 'packages'
+if [ ! -d "$PACKAGES_DIR/python" ]; then
+    exit_on_error "The directory $PACKAGES_DIR/python does not exist. Please create it and add the required .whl files."
+fi
+
+if [ ! -d "$PACKAGES_DIR/ipk" ]; then
+    exit_on_error "The directory $PACKAGES_DIR/ipk does not exist. Please create it and add the required .ipk files."
+fi
+
+# Verify that the required .whl files exist in the 'python' directory
 verify_whl_files() {
     for file in "$@"; do
         if [ ! -f "$PACKAGES_DIR/python/$file" ]; then
@@ -49,7 +59,7 @@ verify_whl_files \
     "jinja2-3.1.4-py3-none-any.whl" \
     "watchdog-4.0.0-py3-none-manylinux2014_armv7l.whl"
 
-# Verify that the required .ipk files exist (assuming these files are listed in ipk-packages.txt)
+# Verify that the required .ipk files exist in the 'ipk' directory (assuming these files are listed in ipk-packages.txt)
 if [ -f "requirements/ipk-packages.txt" ]; then
     while IFS= read -r ipk_file; do
         if [ ! -f "$PACKAGES_DIR/ipk/$ipk_file" ]; then
