@@ -4,6 +4,11 @@
 # setting up working directories, backing up, and ensuring the printer.cfg file.
 # It also triggers the verification and service start scripts.
 
+# Function to print a warning
+warn() {
+    echo "WARNING: $1"
+}
+
 # Function to print and exit on error
 exit_on_error() {
     echo "$1"
@@ -37,16 +42,34 @@ if [ ! -d "$PACKAGES_DIR/ipk" ]; then
     exit_on_error "The directory $PACKAGES_DIR/ipk does not exist. Please create it and add the required .ipk files."
 fi
 
-# Verify that the required .whl files exist in the 'python' directory
-verify_whl_files() {
+# Function to check if a Python package is installed
+is_python_package_installed() {
+    pip3 show "$1" > /dev/null 2>&1
+    return $?
+}
+
+# Function to check if an IPK package is installed
+is_ipk_package_installed() {
+    opkg list-installed | grep -q "$1"
+    return $?
+}
+
+# Verify that the required .whl files exist in the 'python' directory and try to install them if they don't
+verify_and_install_whl_files() {
     for file in "$@"; do
+        package_name=$(echo "$file" | sed 's/-[0-9].*//')
         if [ ! -f "$PACKAGES_DIR/python/$file" ]; then
-            exit_on_error "Required file $file not found in $PACKAGES_DIR/python"
+            if is_python_package_installed "$package_name"; then
+                echo "$package_name is already installed."
+            else
+                warn "Required file $file not found in $PACKAGES_DIR/python and $package_name is not installed. Attempting to download and install..."
+                pip3 install "$package_name" || exit_on_error "Failed to install $package_name from PyPI"
+            fi
         fi
     done
 }
 
-verify_whl_files \
+verify_and_install_whl_files \
     "zipp-3.18.1-py3-none-any.whl" \
     "typing_extensions-4.11.0-py3-none-any.whl" \
     "tomli-2.0.1-py3-none-any.whl" \
@@ -59,11 +82,17 @@ verify_whl_files \
     "jinja2-3.1.4-py3-none-any.whl" \
     "watchdog-4.0.0-py3-none-manylinux2014_armv7l.whl"
 
-# Verify that the required .ipk files exist in the 'ipk' directory (assuming these files are listed in ipk-packages.txt)
+# Verify that the required .ipk files exist in the 'ipk' directory and try to install them if they don't
 if [ -f "requirements/ipk-packages.txt" ]; then
     while IFS= read -r ipk_file; do
+        package_name=$(echo "$ipk_file" | sed 's/_.*//')
         if [ ! -f "$PACKAGES_DIR/ipk/$ipk_file" ]; then
-            exit_on_error "Required file $ipk_file not found in $PACKAGES_DIR/ipk"
+            if is_ipk_package_installed "$package_name"; then
+                echo "$package_name is already installed."
+            else
+                warn "Required file $ipk_file not found in $PACKAGES_DIR/ipk and $package_name is not installed. Attempting to install from Entware..."
+                opkg install "$package_name" || exit_on_error "Failed to install $package_name from Entware"
+            fi
         fi
     done < requirements/ipk-packages.txt
 else
