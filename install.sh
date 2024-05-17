@@ -253,6 +253,15 @@ install_moonraker() {
         opkg install bash || exit_on_error "Failed to install bash"
     fi
 
+    # Create virtual environment using virtualenv.py directly
+    echo "Creating virtual environment..."
+    python3 /usr/lib/python3.8/site-packages/virtualenv.py -p /usr/bin/python3 /usr/data/moonraker-env || exit_on_error "Failed to create virtual environment"
+
+    # Activate virtual environment and install requirements
+    echo "Activating virtual environment and installing requirements..."
+    source /usr/data/moonraker-env/bin/activate
+    pip install -r ./scripts/moonraker-requirements.txt || exit_on_error "Failed to install Moonraker requirements"
+
     # Run install-moonraker.sh with bash as moonrakeruser
     echo "Running install-moonraker.sh with bash as moonrakeruser..."
     su moonrakeruser -c "bash ./scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script as moonrakeruser"
