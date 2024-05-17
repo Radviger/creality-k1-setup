@@ -25,7 +25,7 @@ else
 fi
 
 # Check if Moonraker is already running
-if ps aux | grep -v grep | grep moonraker > /dev/null; then
+if ps aux | grep '[m]oonraker' > /dev/null; then
     echo "Moonraker is already running. Configuring Fluidd and Mainsail with the existing Moonraker service."
 
     # Set the working directory
@@ -183,6 +183,11 @@ pip3 show virtualenv > /dev/null 2>&1
 if [ $? -ne 0 ]; then
     echo "virtualenv is not installed. Installing virtualenv from PyPI..."
     pip3 install virtualenv || exit_on_error "Failed to install virtualenv from PyPI"
+fi
+
+# Ensure virtualenv is available at /usr/bin/virtualenv
+if [ ! -f /usr/bin/virtualenv ]; then
+    ln -s $(which virtualenv) /usr/bin/virtualenv || exit_on_error "Failed to create symlink for virtualenv"
 fi
 
 # Trigger the service start script
