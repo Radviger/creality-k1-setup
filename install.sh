@@ -128,7 +128,7 @@ verify_and_install_whl_files \
     "mergedeep-1.3.4-py3-none-any.whl" \
     "packaging-24.0-py3-none-any.whl" \
     "jinja2-3.1.4-py3-none-any.whl" \
-    "watchdog-4.0.0-py3-none-manylinux2014_armv7l.whl"
+    "watchdog-2.1.9-py3-none-any.whl"
 
 # Verify that the required .ipk files exist in the 'ipk' directory and try to install them if they don't
 if [ -f "requirements/ipk-packages.txt" ]; then

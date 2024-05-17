@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# MJ: This script uninstalls the Mainsail and Fluidd setup for the Creality K1 and K1-Max printers.
-# It removes installed directories and restores the original configuration.
+# MJ: This script uninstalls the setup by removing installed directories and services.
+# It does not remove the default vendor (Creality) Moonraker installation if it exists.
 
 # Function to print and exit on error
 exit_on_error() {
@@ -9,39 +9,46 @@ exit_on_error() {
     exit 1
 }
 
-# Stop services
-echo "Stopping Moonraker..."
-/opt/etc/init.d/S80moonraker stop || echo "Failed to stop Moonraker"
+# Locate existing Moonraker installation
+EXISTING_MOONRAKER_DIR=$(find / -name "moonraker" -type d 2>/dev/null | grep -v "/usr/data/moonraker")
 
-echo "Stopping Nginx..."
-/opt/etc/init.d/S80nginx stop || echo "Failed to stop Nginx"
-
-# Remove installed directories
-echo "Removing Moonraker directory..."
-rm -rf /usr/data/moonraker || exit_on_error "Failed to remove Moonraker directory"
-
-echo "Removing Mainsail directory..."
-rm -rf /usr/data/mainsail || exit_on_error "Failed to remove Mainsail directory"
-
-echo "Removing Fluidd directory..."
-rm -rf /usr/data/fluidd || exit_on_error "Failed to remove Fluidd directory"
-
-# Remove Nginx configuration
-echo "Removing Nginx configuration..."
-rm -f /opt/etc/nginx/nginx.conf || exit_on_error "Failed to remove Nginx configuration"
-
-# Restore backup of printer.cfg if it exists
-BACKUP_PRINTER_CFG="/usr/data/printer_data/config/printer.cfg.backup"
-PRINTER_CFG="/usr/data/printer_data/config/printer.cfg"
-
-if [ -f "$BACKUP_PRINTER_CFG" ]; then
-    echo "Restoring original printer.cfg..."
-    mv "$BACKUP_PRINTER_CFG" "$PRINTER_CFG" || exit_on_error "Failed to restore original printer.cfg"
+# Check if existing Moonraker directory is found
+if [ -z "$EXISTING_MOONRAKER_DIR" ]; then
+    echo "No existing Moonraker installation found."
+else
+    echo "Found existing Moonraker installation at: $EXISTING_MOONRAKER_DIR"
 fi
 
-# Remove the setup directory
-echo "Removing setup directory..."
-cd /usr/data || exit_on_error "Failed to change directory to /usr/data"
-rm -rf creality-k1-setup || exit_on_error "Failed to remove setup directory"
+# Uninstall Fluidd and Mainsail
+WORKING_DIR="/usr/data"
+FLUIDD_DIR="$WORKING_DIR/fluidd"
+MAINSAIL_DIR="$WORKING_DIR/mainsail"
+
+if [ -d "$FLUIDD_DIR" ]; then
+    echo "Removing Fluidd directory..."
+    rm -rf "$FLUIDD_DIR" || exit_on_error "Failed to remove Fluidd directory"
+fi
+
+if [ -d "$MAINSAIL_DIR" ]; then
+    echo "Removing Mainsail directory..."
+    rm -rf "$MAINSAIL_DIR" || exit_on_error "Failed to remove Mainsail directory"
+fi
+
+# Uninstall Moonraker only if it is not the existing installation
+MOONRAKER_DIR="$WORKING_DIR/moonraker"
+if [ -d "$MOONRAKER_DIR" ] && [ "$MOONRAKER_DIR" != "$EXISTING_MOONRAKER_DIR" ]; then
+    echo "Removing Moonraker directory..."
+    rm -rf "$MOONRAKER_DIR" || exit_on_error "Failed to remove Moonraker directory"
+fi
+
+# Remove Moonraker user
+if id "moonrakeruser" >/dev/null 2>&1; then
+    echo "Removing moonrakeruser..."
+    deluser moonrakeruser || exit_on_error "Failed to remove moonrakeruser"
+fi
+
+# Restart Nginx to apply changes
+echo "Restarting Nginx..."
+/opt/etc/init.d/S80nginx restart || exit_on_error "Failed to restart Nginx"
 
 echo "Uninstallation complete!"
