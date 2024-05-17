@@ -1,8 +1,9 @@
 #!/bin/sh
 
 # MJ: This script performs the initial setup by checking the internet connection,
-# setting up working directories, backing up, and ensuring the printer.cfg file.
-# It also triggers the verification and service start scripts.
+# checking if Moonraker is already running, setting up working directories,
+# backing up, and ensuring the printer.cfg file. It also triggers the verification
+# and service start scripts as necessary.
 
 # Function to print a warning
 warn() {
@@ -22,6 +23,53 @@ if [ $? -ne 0 ]; then
 else
     echo "Internet connection verified."
 fi
+
+# Check if Moonraker is already running
+if ps aux | grep -v grep | grep moonraker > /dev/null; then
+    echo "Moonraker is already running. Configuring Fluidd and Mainsail with the existing Moonraker service."
+
+    # Set the working directory
+    WORKING_DIR="/usr/data"
+    
+    # Install Fluidd and Mainsail
+    cd $WORKING_DIR
+    [ ! -d "fluidd" ] && git clone https://github.com/fluidd-core/fluidd.git fluidd
+    [ ! -d "mainsail" ] && git clone https://github.com/mainsail-crew/mainsail.git mainsail
+
+    # Configure Nginx
+    cat <<EOF > /opt/etc/nginx/nginx.conf
+server {
+    listen 80;
+    server_name _;
+
+    location /fluidd {
+        alias /usr/data/fluidd;
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    location /mainsail {
+        alias /usr/data/mainsail;
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    location /moonraker {
+        proxy_pass http://localhost:7125;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+    }
+}
+EOF
+
+    # Restart Nginx to apply changes
+    /opt/etc/init.d/S80nginx restart || exit_on_error "Failed to restart Nginx"
+
+    echo "Configuration complete! Fluidd and Mainsail are set up with the existing Moonraker service."
+    exit 0
+fi
+
+echo "Moonraker is not running. Proceeding with full installation."
 
 # Set the working directory
 WORKING_DIR="/usr/data"
