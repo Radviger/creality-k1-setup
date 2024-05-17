@@ -29,7 +29,7 @@ The Creality K1 and K1-Max 3D printers run on a restricted environment. This gui
 ## Installing Entware
 
 1. **Download and Install Entware:**
-   - SSH into your Creality K1 or K1-Max printer.
+   - SSH into your Creality K1 or K1-Max printer ( see below how to do it with Putty).
    - Run the following commands to install Entware:
 
      ```sh
