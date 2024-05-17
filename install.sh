@@ -1,9 +1,9 @@
 #!/bin/sh
 
 # MJ: This script performs the initial setup by checking the internet connection,
-# checking if Moonraker is already running, setting up working directories,
-# backing up, and ensuring the printer.cfg file. It also triggers the verification
-# and service start scripts as necessary.
+# ensuring Entware is installed, checking if Moonraker is already running, 
+# setting up working directories, backing up, and ensuring the printer.cfg file.
+# It also triggers the verification and service start scripts as necessary.
 
 # Function to print a warning
 warn() {
@@ -22,6 +22,19 @@ if [ $? -ne 0 ]; then
     exit_on_error "No internet connection. Please download the necessary packages manually. See the text files (requirements/requirements.txt, requirements/requirements_pypi.txt, requirements/ipk-packages.txt) for the list of packages."
 else
     echo "Internet connection verified."
+fi
+
+# Check if Entware is installed
+if ! opkg --version > /dev/null 2>&1; then
+    echo "Entware is not installed. Installing Entware for MIPS..."
+    cd /tmp
+    wget http://bin.entware.net/mipselsf-k3.4/installer/generic.sh
+    sh generic.sh || exit_on_error "Failed to install Entware"
+    echo "Entware installation complete. Updating package list..."
+    /opt/bin/opkg update || exit_on_error "Failed to update Entware package list"
+    echo "Entware is installed and updated."
+else
+    echo "Entware is already installed."
 fi
 
 # Check if Moonraker is already running
@@ -188,9 +201,8 @@ else
     exit_on_error "No printer.cfg found to copy."
 fi
 
-# Ensure scripts are executable
-chmod +x "$SCRIPTS_DIR/install_moonraker.sh"
-chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
+# Ensure the scripts have the correct permissions
+chmod +x "$SCRIPTS_DIR"/*.sh
 
 # Trigger Moonraker installation script
 sh "$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to install Moonraker"
