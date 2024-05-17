@@ -132,14 +132,58 @@ verify_and_install_whl_files \
     "jinja2-3.1.4-py3-none-any.whl" \
     "watchdog-2.1.9-py3-none-any.whl"
 
-# List of required Python packages to be installed via pip
-required_python_packages="python3-virtualenv python3-dev liblmdb-dev libopenjp2-7 libsodium-dev zlib1g-dev libjpeg-dev packagekit wireless-tools curl"
+# Install required dependencies from source or alternative methods
+install_from_source_or_alternative() {
+    echo "Attempting to install $1 from source or alternative method..."
+    case "$1" in
+        python3-virtualenv)
+            pip3 install virtualenv || exit_on_error "Failed to install virtualenv"
+            ;;
+        python3-dev)
+            # No direct way to install python3-dev via pip, so we'll skip this as it is likely not required directly for Moonraker
+            echo "Skipping python3-dev as it's not installable via pip"
+            ;;
+        liblmdb-dev)
+            pip3 install lmdb || exit_on_error "Failed to install lmdb"
+            ;;
+        libopenjp2-7)
+            pip3 install pillow || exit_on_error "Failed to install pillow (includes support for openjp2)"
+            ;;
+        libsodium-dev)
+            pip3 install pynacl || exit_on_error "Failed to install pynacl"
+            ;;
+        zlib1g-dev)
+            # Typically part of the Python standard library, ensuring zlib is available
+            python3 -c "import zlib" || exit_on_error "zlib not available in Python standard library"
+            ;;
+        libjpeg-dev)
+            pip3 install pillow || exit_on_error "Failed to install pillow (includes support for libjpeg)"
+            ;;
+        packagekit)
+            # No direct equivalent, ensure required functionality via pip packages
+            echo "Skipping packagekit as there's no direct equivalent"
+            ;;
+        wireless-tools)
+            # No direct equivalent, ensure required functionality via pip packages
+            echo "Skipping wireless-tools as there's no direct equivalent"
+            ;;
+        curl)
+            # Ensure curl is installed via Entware
+            opkg install curl || exit_on_error "Failed to install curl"
+            ;;
+        *)
+            warn "No alternative installation method for $1"
+            ;;
+    esac
+}
 
-# Install the required Python packages
-for package in $required_python_packages; do
-    if ! is_python_package_installed "$package"; then
-        echo "Installing $package via pip..."
-        pip3 install "$package" || exit_on_error "Failed to install $package from PyPI"
+# List of required dependencies to install from source or alternative methods
+required_dependencies="python3-virtualenv python3-dev liblmdb-dev libopenjp2-7 libsodium-dev zlib1g-dev libjpeg-dev packagekit wireless-tools curl"
+
+# Install the required dependencies
+for dep in $required_dependencies; do
+    if ! is_python_package_installed "$dep" && ! is_ipk_package_installed "$dep"; then
+        install_from_source_or_alternative "$dep"
     fi
 done
 
