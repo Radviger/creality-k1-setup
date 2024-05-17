@@ -29,7 +29,7 @@ if ps aux | grep '[m]oonraker' > /dev/null; then
     echo "Moonraker is already running. Configuring Fluidd and Mainsail with the existing Moonraker service."
 
     # Trigger Nginx setup script
-    ./scripts/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+    sh ./scripts/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
     exit 0
 fi
 
@@ -188,10 +188,14 @@ else
     exit_on_error "No printer.cfg found to copy."
 fi
 
+# Ensure scripts are executable
+chmod +x "$SCRIPTS_DIR/install_moonraker.sh"
+chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
+
 # Trigger Moonraker installation script
-"$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to install Moonraker"
+sh "$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to install Moonraker"
 
 # Trigger Nginx setup script
-"$SCRIPTS_DIR/setup_nginx.sh" || exit_on_error "Failed to configure Nginx"
+sh "$SCRIPTS_DIR/setup_nginx.sh" || exit_on_error "Failed to configure Nginx"
 
 echo "Installation complete! Mainsail is running on port 80, and Fluidd is running on port 80 under /fluidd."
