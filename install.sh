@@ -28,25 +28,26 @@ mkdir -p "$PACKAGES_DIR/python" || exit_on_error "Failed to create directory $PA
 mkdir -p "$PACKAGES_DIR/ipk" || exit_on_error "Failed to create directory $PACKAGES_DIR/ipk"
 
 # Verify that the required .whl files exist
-required_whl_files=(
-    "zipp-3.18.1-py3-none-any.whl"
-    "typing_extensions-4.11.0-py3-none-any.whl"
-    "tomli-2.0.1-py3-none-any.whl"
-    "setuptools_scm-8.1.0-py3-none-any.whl"
-    "importlib_metadata-7.1.0-py3-none-any.whl"
-    "Markdown-3.6-py3-none-any.whl"
-    "mkdocs-1.6.0-py3-none-any.whl"
-    "mergedeep-1.3.4-py3-none-any.whl"
-    "packaging-24.0-py3-none-any.whl"
-    "jinja2-3.1.4-py3-none-any.whl"
-    "watchdog-4.0.0-py3-none-manylinux2014_armv7l.whl"
-)
+verify_whl_files() {
+    for file in "$@"; do
+        if [ ! -f "$PACKAGES_DIR/python/$file" ]; then
+            exit_on_error "Required file $file not found in $PACKAGES_DIR/python"
+        fi
+    done
+}
 
-for file in "${required_whl_files[@]}"; do
-    if [ ! -f "$PACKAGES_DIR/python/$file" ]; then
-        exit_on_error "Required file $file not found in $PACKAGES_DIR/python"
-    fi
-done
+verify_whl_files \
+    "zipp-3.18.1-py3-none-any.whl" \
+    "typing_extensions-4.11.0-py3-none-any.whl" \
+    "tomli-2.0.1-py3-none-any.whl" \
+    "setuptools_scm-8.1.0-py3-none-any.whl" \
+    "importlib_metadata-7.1.0-py3-none-any.whl" \
+    "Markdown-3.6-py3-none-any.whl" \
+    "mkdocs-1.6.0-py3-none-any.whl" \
+    "mergedeep-1.3.4-py3-none-any.whl" \
+    "packaging-24.0-py3-none-any.whl" \
+    "jinja2-3.1.4-py3-none-any.whl" \
+    "watchdog-4.0.0-py3-none-manylinux2014_armv7l.whl"
 
 # Verify that the required .ipk files exist (assuming these files are listed in ipk-packages.txt)
 if [ -f "requirements/ipk-packages.txt" ]; then
