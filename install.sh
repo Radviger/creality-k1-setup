@@ -29,14 +29,15 @@ if ps aux | grep '[m]oonraker' > /dev/null; then
     echo "Moonraker is already running. Configuring Fluidd and Mainsail with the existing Moonraker service."
 
     # Trigger Nginx setup script
-    ./setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+    ./scripts/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
     exit 0
 fi
 
 echo "Moonraker is not running. Proceeding with full installation."
 
-# Set the working directory
+# Set the working directory and script directory
 WORKING_DIR="/usr/data"
+SCRIPTS_DIR="$WORKING_DIR/creality-k1-setup/scripts"
 PACKAGES_DIR="$WORKING_DIR/packages"
 CONFIG_DIR="$WORKING_DIR/config"
 
@@ -188,9 +189,9 @@ else
 fi
 
 # Trigger Moonraker installation script
-./install_moonraker.sh || exit_on_error "Failed to install Moonraker"
+"$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to install Moonraker"
 
 # Trigger Nginx setup script
-./setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+"$SCRIPTS_DIR/setup_nginx.sh" || exit_on_error "Failed to configure Nginx"
 
 echo "Installation complete! Mainsail is running on port 80, and Fluidd is running on port 80 under /fluidd."
