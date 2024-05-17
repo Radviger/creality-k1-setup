@@ -178,16 +178,21 @@ fi
 echo "Running verification script..."
 sh scripts/verify_packages.sh || exit_on_error "Failed to run verification script"
 
-# Ensure virtualenv is installed
+# Ensure virtualenv is installed and create a symlink if necessary
 pip3 show virtualenv > /dev/null 2>&1
 if [ $? -ne 0 ]; then
     echo "virtualenv is not installed. Installing virtualenv from PyPI..."
     pip3 install virtualenv || exit_on_error "Failed to install virtualenv from PyPI"
 fi
 
+VIRTUALENV_PATH=$(which virtualenv)
+if [ -z "$VIRTUALENV_PATH" ]; then
+    VIRTUALENV_PATH=$(pip show virtualenv | grep Location | awk '{print $2}')/bin/virtualenv
+fi
+
 # Ensure virtualenv is available at /usr/bin/virtualenv
 if [ ! -f /usr/bin/virtualenv ]; then
-    ln -s $(which virtualenv) /usr/bin/virtualenv || exit_on_error "Failed to create symlink for virtualenv"
+    ln -s "$VIRTUALENV_PATH" /usr/bin/virtualenv || exit_on_error "Failed to create symlink for virtualenv"
 fi
 
 # Trigger the service start script
