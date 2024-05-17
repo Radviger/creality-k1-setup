@@ -113,6 +113,8 @@ verify_and_install_whl_files() {
                 warn "Required file $file not found in $PACKAGES_DIR/python and $package_name is not installed. Attempting to download and install..."
                 pip3 install "$package_name" || exit_on_error "Failed to install $package_name from PyPI"
             fi
+        else
+            pip3 install "$PACKAGES_DIR/python/$file" || exit_on_error "Failed to install $file from local file"
         fi
     done
 }
@@ -130,22 +132,16 @@ verify_and_install_whl_files \
     "jinja2-3.1.4-py3-none-any.whl" \
     "watchdog-2.1.9-py3-none-any.whl"
 
-# Verify that the required .ipk files exist in the 'ipk' directory and try to install them if they don't
-if [ -f "requirements/ipk-packages.txt" ]; then
-    while IFS= read -r ipk_file; do
-        package_name=$(echo "$ipk_file" | sed 's/_.*//')
-        if [ ! -f "$PACKAGES_DIR/ipk/$ipk_file" ]; then
-            if is_ipk_package_installed "$package_name"; then
-                echo "$package_name is already installed."
-            else
-                warn "Required file $ipk_file not found in $PACKAGES_DIR/ipk and $package_name is not installed. Attempting to install from Entware..."
-                opkg install "$package_name" || exit_on_error "Failed to install $package_name from Entware"
-            fi
-        fi
-    done < requirements/ipk-packages.txt
-else
-    exit_on_error "File requirements/ipk-packages.txt not found"
-fi
+# List of required Python packages to be installed via pip
+required_python_packages="python3-virtualenv python3-dev liblmdb-dev libopenjp2-7 libsodium-dev zlib1g-dev libjpeg-dev packagekit wireless-tools curl"
+
+# Install the required Python packages
+for package in $required_python_packages; do
+    if ! is_python_package_installed "$package"; then
+        echo "Installing $package via pip..."
+        pip3 install "$package" || exit_on_error "Failed to install $package from PyPI"
+    fi
+done
 
 # Backup existing printer.cfg
 PRINTER_CFG="/usr/data/printer_data/config/printer.cfg"
@@ -194,6 +190,15 @@ fi
 if [ ! -f /usr/bin/virtualenv ]; then
     ln -s "$VIRTUALENV_PATH" /usr/bin/virtualenv || exit_on_error "Failed to create symlink for virtualenv"
 fi
+
+# Modify the install-moonraker.sh script
+echo "Modifying install-moonraker.sh to work without sudo and apt-get..."
+sed -i 's/sudo //g' ./scripts/install-moonraker.sh
+sed -i '/apt-get/d' ./scripts/install-moonraker.sh
+
+# Run install-moonraker.sh with bash as moonrakeruser
+echo "Running install-moonraker.sh with bash as moonrakeruser..."
+su - moonrakeruser -c "PATH=$PATH:/usr/bin bash ./scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script as moonrakeruser"
 
 # Trigger the service start script
 echo "Running service start script..."
