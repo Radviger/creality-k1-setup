@@ -19,11 +19,6 @@ fi
 WORKING_DIR="/usr/data"
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
 VENV_DIR="$WORKING_DIR/moonraker-env"
-TMP_DIR="$WORKING_DIR/tmp"
-
-# Create the temporary directory
-mkdir -p $TMP_DIR || exit_on_error "Failed to create temporary directory $TMP_DIR"
-export TMPDIR=$TMP_DIR
 
 # Install Moonraker
 echo "Installing Moonraker..."
@@ -45,6 +40,9 @@ fi
 echo "Modifying install-moonraker.sh to work without sudo and apt-get..."
 sed -i 's/sudo //g' ./scripts/install-moonraker.sh
 sed -i '/apt-get/d' ./scripts/install-moonraker.sh
+
+# Upgrade pip
+pip install --upgrade pip || exit_on_error "Failed to upgrade pip"
 
 # Create virtual environment using virtualenv.py directly
 echo "Creating virtual environment..."
