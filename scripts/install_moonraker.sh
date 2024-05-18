@@ -19,6 +19,11 @@ fi
 WORKING_DIR="/usr/data"
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
 VENV_DIR="$WORKING_DIR/moonraker-env"
+TMP_DIR="$WORKING_DIR/tmp"
+
+# Create the temporary directory
+mkdir -p $TMP_DIR || exit_on_error "Failed to create temporary directory $TMP_DIR"
+export TMPDIR=$TMP_DIR
 
 # Install Moonraker
 echo "Installing Moonraker..."
