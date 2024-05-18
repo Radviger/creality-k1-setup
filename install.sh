@@ -1,9 +1,9 @@
 #!/bin/sh
 
 # MJ: This script performs the initial setup by checking the internet connection,
-# ensuring Entware is installed, checking if Moonraker is already running, 
-# setting up working directories, backing up, and ensuring the printer.cfg file.
-# It also triggers the verification and service start scripts as necessary.
+# checking if Moonraker is already running, setting up working directories,
+# backing up, and ensuring the printer.cfg file. It also triggers the verification
+# and service start scripts as necessary.
 
 # Function to print a warning
 warn() {
@@ -24,33 +24,19 @@ else
     echo "Internet connection verified."
 fi
 
-# Check if Entware is installed
-if ! opkg --version > /dev/null 2>&1; then
-    echo "Entware is not installed. Installing Entware for MIPS..."
-    cd /tmp
-    wget http://bin.entware.net/mipselsf-k3.4/installer/generic.sh
-    sh generic.sh || exit_on_error "Failed to install Entware"
-    echo "Entware installation complete. Updating package list..."
-    /opt/bin/opkg update || exit_on_error "Failed to update Entware package list"
-    echo "Entware is installed and updated."
-else
-    echo "Entware is already installed."
-fi
-
 # Check if Moonraker is already running
 if ps aux | grep '[m]oonraker' > /dev/null; then
     echo "Moonraker is already running. Configuring Fluidd and Mainsail with the existing Moonraker service."
 
     # Trigger Nginx setup script
-    sh ./scripts/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+    ./setup_nginx.sh || exit_on_error "Failed to configure Nginx"
     exit 0
 fi
 
 echo "Moonraker is not running. Proceeding with full installation."
 
-# Set the working directory and script directory
+# Set the working directory
 WORKING_DIR="/usr/data"
-SCRIPTS_DIR="$WORKING_DIR/creality-k1-setup/scripts"
 PACKAGES_DIR="$WORKING_DIR/packages"
 CONFIG_DIR="$WORKING_DIR/config"
 
@@ -108,13 +94,14 @@ verify_and_install_whl_files \
     "mergedeep-1.3.4-py3-none-any.whl" \
     "packaging-24.0-py3-none-any.whl" \
     "jinja2-3.1.4-py3-none-any.whl" \
-    "watchdog-2.1.9-py3-none-any.whl"
+    "watchdog-2.1.9-py3-none-manylinux2014_armv7l.whl" \
+    "lmdb-1.4.1-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl"
 
 # Ensure necessary system libraries are installed
 install_system_libraries() {
     echo "Installing necessary system libraries..."
     opkg update
-    opkg install libsodium libjpeg zlib || exit_on_error "Failed to install necessary system libraries"
+    opkg install libsodium libjpeg zlib curl || exit_on_error "Failed to install necessary system libraries"
 }
 
 install_system_libraries
@@ -201,14 +188,14 @@ else
     exit_on_error "No printer.cfg found to copy."
 fi
 
-# Ensure the scripts have the correct permissions
-chmod +x "$SCRIPTS_DIR"/*.sh
+# Upgrade pip to the latest version
+echo "Upgrading pip to the latest version..."
+pip3 install --upgrade pip || exit_on_error "Failed to upgrade pip"
 
 # Trigger Moonraker installation script
 ./scripts/install_moonraker.sh || exit_on_error "Failed to install Moonraker"
 
-
 # Trigger Nginx setup script
-sh "$SCRIPTS_DIR/setup_nginx.sh" || exit_on_error "Failed to configure Nginx"
+./scripts/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
 
 echo "Installation complete! Mainsail is running on port 80, and Fluidd is running on port 80 under /fluidd."

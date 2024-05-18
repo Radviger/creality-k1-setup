@@ -55,6 +55,9 @@ echo "Activating virtual environment and installing requirements..."
 source $VENV_DIR/bin/activate
 pip install --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host files.pythonhosted.org -r ./scripts/moonraker-requirements.txt || exit_on_error "Failed to install Moonraker requirements"
 
+# Set environment variable to use system lmdb
+export LMDB_FORCE_SYSTEM=1
+
 # Run install-moonraker.sh with bash as moonrakeruser
 echo "Running install-moonraker.sh with bash as moonrakeruser..."
 su moonrakeruser -c "bash ./scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script as moonrakeruser"

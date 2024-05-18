@@ -9,4 +9,5 @@ mkdocs-1.6.0-py3-none-any.whl
 mergedeep-1.3.4-py3-none-any.whl
 packaging-24.0-py3-none-any.whl
 jinja2-3.1.4-py3-none-any.whl
-watchdog-2.1.9-py3-none-manylinux2014_armv7l.whl 
+watchdog-2.1.9-py3-none-manylinux2014_armv7l.whl
+lmdb-1.4.1-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
