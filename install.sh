@@ -205,7 +205,8 @@ fi
 chmod +x "$SCRIPTS_DIR"/*.sh
 
 # Trigger Moonraker installation script
-sh "$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to install Moonraker"
+./scripts/install_moonraker.sh || exit_on_error "Failed to install Moonraker"
+
 
 # Trigger Nginx setup script
 sh "$SCRIPTS_DIR/setup_nginx.sh" || exit_on_error "Failed to configure Nginx"

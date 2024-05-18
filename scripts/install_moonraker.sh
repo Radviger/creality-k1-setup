@@ -18,6 +18,7 @@ fi
 # Set the working directory
 WORKING_DIR="/usr/data"
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
+VENV_DIR="$WORKING_DIR/moonraker-env"
 
 # Install Moonraker
 echo "Installing Moonraker..."
@@ -42,11 +43,11 @@ sed -i '/apt-get/d' ./scripts/install-moonraker.sh
 
 # Create virtual environment using virtualenv.py directly
 echo "Creating virtual environment..."
-python3 /usr/lib/python3.8/site-packages/virtualenv.py -p /usr/bin/python3 /usr/data/moonraker-env || exit_on_error "Failed to create virtual environment"
+python3 /usr/lib/python3.8/site-packages/virtualenv.py -p /usr/bin/python3 $VENV_DIR || exit_on_error "Failed to create virtual environment"
 
 # Activate virtual environment and install requirements
 echo "Activating virtual environment and installing requirements..."
-source /usr/data/moonraker-env/bin/activate
+source $VENV_DIR/bin/activate
 pip install --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host files.pythonhosted.org -r ./scripts/moonraker-requirements.txt || exit_on_error "Failed to install Moonraker requirements"
 
 # Run install-moonraker.sh with bash as moonrakeruser
@@ -54,4 +55,3 @@ echo "Running install-moonraker.sh with bash as moonrakeruser..."
 su moonrakeruser -c "bash ./scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script as moonrakeruser"
 
 echo "Moonraker installation complete."
-
