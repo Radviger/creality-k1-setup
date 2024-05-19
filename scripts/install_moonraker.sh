@@ -56,7 +56,7 @@ if [ -z "$VIRTUALENV_PATH" ]; then
 fi
 
 # Switch to moonrakeruser before creating the virtual environment and installing packages
-su moonrakeruser <<'EOF'
+su - moonrakeruser <<'EOF'
 # Set the working directory for moonrakeruser
 WORKING_DIR="/usr/data"
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
@@ -68,6 +68,9 @@ mkdir -p "$TMPDIR"
 
 # Export TMPDIR to use during pip installations
 export TMPDIR="$TMPDIR"
+
+# Ensure the PATH includes the directory for opkg
+export PATH=$PATH:/opt/bin:/opt/sbin
 
 # Create virtual environment using virtualenv.py directly
 echo "Creating virtual environment..."
