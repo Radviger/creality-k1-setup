@@ -19,6 +19,13 @@ fi
 WORKING_DIR="/usr/data"
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
 VENV_DIR="$WORKING_DIR/moonraker-env"
+TMPDIR="$WORKING_DIR/tmp"
+
+# Ensure TMPDIR exists
+mkdir -p "$TMPDIR"
+
+# Export TMPDIR to use during pip installations
+export TMPDIR="$TMPDIR"
 
 # Install Moonraker
 echo "Installing Moonraker..."
@@ -41,7 +48,21 @@ echo "Modifying install-moonraker.sh to work without sudo and apt-get..."
 sed -i 's/sudo //g' ./scripts/install-moonraker.sh
 sed -i '/apt-get/d' ./scripts/install-moonraker.sh
 
-# Upgrade pip
+# Switch to moonrakeruser before creating the virtual environment and installing packages
+su moonrakeruser <<'EOF'
+# Set the working directory for moonrakeruser
+WORKING_DIR="/usr/data"
+MOONRAKER_DIR="$WORKING_DIR/moonraker"
+VENV_DIR="$WORKING_DIR/moonraker-env"
+TMPDIR="$WORKING_DIR/tmp"
+
+# Ensure TMPDIR exists
+mkdir -p "$TMPDIR"
+
+# Export TMPDIR to use during pip installations
+export TMPDIR="$TMPDIR"
+
+# Upgrade pip within the virtual environment
 pip install --upgrade pip || exit_on_error "Failed to upgrade pip"
 
 # Create virtual environment using virtualenv.py directly
@@ -51,13 +72,14 @@ python3 /usr/lib/python3.8/site-packages/virtualenv.py -p /usr/bin/python3 $VENV
 # Activate virtual environment and install requirements
 echo "Activating virtual environment and installing requirements..."
 source $VENV_DIR/bin/activate
-pip install --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host files.pythonhosted.org -r ./scripts/moonraker-requirements.txt || exit_on_error "Failed to install Moonraker requirements"
+pip install --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host files.pythonhosted.org -r $MOONRAKER_DIR/scripts/moonraker-requirements.txt || exit_on_error "Failed to install Moonraker requirements"
 
 # Set environment variable to use system lmdb
 export LMDB_FORCE_SYSTEM=1
 
 # Run install-moonraker.sh with bash as moonrakeruser
 echo "Running install-moonraker.sh with bash as moonrakeruser..."
-su moonrakeruser -c "bash ./scripts/install-moonraker.sh" || exit_on_error "Failed to run Moonraker install script as moonrakeruser"
+bash $MOONRAKER_DIR/scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script as moonrakeruser"
+EOF
 
 echo "Moonraker installation complete."
