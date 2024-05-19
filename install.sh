@@ -232,6 +232,10 @@ verify_moonrakeruser_permissions() {
 EOF
 }
 
+# Fix sudo ownership and permissions
+chown root:root /opt/bin/sudo
+chmod 4755 /opt/bin/sudo
+
 # Verify moonrakeruser permissions
 verify_moonrakeruser_permissions || exit_on_error "Failed to verify moonrakeruser permissions"
 
