@@ -203,23 +203,81 @@ chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
 # Ensure moonrakeruser has ownership of the /usr/data directory
 chown -R moonrakeruser:moonrakeruser /usr/data
 
+# Function to verify if moonrakeruser has necessary permissions
+verify_moonrakeruser_permissions() {
+    su - moonrakeruser << 'EOF'
+    # Set PATH to include Entware binaries
+    export PATH=$PATH:/opt/bin:/opt/sbin
+
+    # Ensure bash is installed
+    BASH_PATH=$(which bash)
+    if [ -z "$BASH_PATH" ]; then
+        echo "Bash is not installed. Installing bash..."
+        opkg install bash || exit_on_error "Failed to install bash"
+    fi
+
+    # Check if sudo is installed
+    SUDO_PATH=$(which sudo)
+    if [ -z "$SUDO_PATH" ]; then
+        echo "Sudo is not installed. Installing sudo..."
+        opkg install sudo || exit_on_error "Failed to install sudo"
+    fi
+
+    # Verify sudo permissions
+    echo "Verifying sudo permissions for moonrakeruser..."
+    echo "moonrakeruser ALL=(ALL) NOPASSWD: ALL" | sudo EDITOR='tee -a' visudo
+
+    # Verify sudo and bash installations
+    sudo bash -c "echo 'Sudo and Bash are working for moonrakeruser'"
+EOF
+}
+
+# Verify moonrakeruser permissions
+verify_moonrakeruser_permissions || exit_on_error "Failed to verify moonrakeruser permissions"
+
 # Switch to moonrakeruser and run the install_moonraker.sh script
 su - moonrakeruser << 'EOF'
 # Set PATH to include Entware binaries
 export PATH=$PATH:/opt/bin:/opt/sbin
 
-# Ensure bash is installed
-BASH_PATH=$(which bash)
-if [ -z "$BASH_PATH" ]; then
-    echo "Bash is not installed. Installing bash..."
-    opkg install bash || exit_on_error "Failed to install bash"
-fi
-
 # Run the Moonraker installation script
 sh /usr/data/creality-k1-setup/scripts/install_moonraker.sh
 EOF
 
-# Trigger Nginx setup script
-$SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+# Check if Nginx is installed
+NGINX_PATH="/opt/sbin/nginx"
+if [ -z "$NGINX_PATH" ]; then
+    # Trigger Nginx setup script
+    $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+else
+    echo "Nginx is already installed. Configuring existing Nginx..."
+    cat <<EOF > /opt/etc/nginx/nginx.conf
+server {
+    listen 80;
+    server_name _;
+
+    location /fluidd {
+        alias /usr/data/fluidd;
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    location /mainsail {
+        alias /usr/data/mainsail;
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    location /moonraker {
+        proxy_pass http://localhost:7125;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+    }
+}
+EOF
+
+    # Restart Nginx
+    /opt/etc/init.d/S80nginx restart || exit_on_error "Failed to restart Nginx"
+fi
 
 echo "Installation complete! Mainsail is running on port 80, and Fluidd is running on port 80 under /fluidd."
