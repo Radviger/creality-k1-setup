@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Source the centralized configuration file
+source ./config.sh
+
 # MJ: This script performs the initial setup by checking the internet connection,
 # checking if Moonraker is already running, setting up working directories,
 # backing up, and ensuring the printer.cfg file. It also triggers the verification
@@ -35,12 +38,6 @@ fi
 
 echo "Moonraker is not running. Proceeding with full installation."
 
-# Set the working directory
-WORKING_DIR="/usr/data"
-PACKAGES_DIR="$WORKING_DIR/packages"
-CONFIG_DIR="$WORKING_DIR/config"
-SCRIPTS_DIR="$WORKING_DIR/creality-k1-setup/scripts"
-
 # Verify that the 'packages' directory exists
 if [ ! -d "$PACKAGES_DIR" ]; then
     exit_on_error "The directory $PACKAGES_DIR does not exist. Please ensure the repository is cloned correctly."
@@ -54,6 +51,21 @@ fi
 if [ ! -d "$PACKAGES_DIR/ipk" ]; then
     exit_on_error "The directory $PACKAGES_DIR/ipk does not exist. Please create it and add the required .ipk files."
 fi
+
+# Check for Python version compatibility and upgrade Python and pip if necessary
+echo "Checking Python version..."
+python_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+required_python_version="3.6"
+if [ "$(printf '%s\n' "$required_python_version" "$python_version" | sort -V | head -n1)" != "$required_python_version" ]; then
+    echo "Python version is less than $required_python_version. Upgrading Python..."
+    opkg install python3 || exit_on_error "Failed to upgrade Python"
+else
+    echo "Python version is $python_version, which is compatible."
+fi
+
+# Upgrade pip
+echo "Upgrading pip to the latest version..."
+pip3 install --upgrade pip || exit_on_error "Failed to upgrade pip"
 
 # Function to check if a Python package is installed
 is_python_package_installed() {
@@ -163,9 +175,6 @@ for dep in $required_dependencies; do
 done
 
 # Backup existing printer.cfg
-PRINTER_CFG="/usr/data/printer_data/config/printer.cfg"
-BACKUP_PRINTER_CFG="/usr/data/printer_data/config/printer.cfg.backup"
-
 if [ -f "$PRINTER_CFG" ]; then
     echo "Backing up existing printer.cfg to $BACKUP_PRINTER_CFG"
     cp "$PRINTER_CFG" "$BACKUP_PRINTER_CFG" || exit_on_error "Failed to backup printer.cfg"
@@ -174,8 +183,6 @@ else
 fi
 
 # Ensure printer.cfg is accessible
-FLUIDD_KLIPPER_CFG_DIR="/etc/fluidd_klipper/config"
-
 if [ ! -d "$FLUIDD_KLIPPER_CFG_DIR" ]; then
     echo "Creating directory $FLUIDD_KLIPPER_CFG_DIR"
     mkdir -p "$FLUIDD_KLIPPER_CFG_DIR" || exit_on_error "Failed to create directory $FLUIDD_KLIPPER_CFG_DIR"
