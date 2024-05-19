@@ -201,10 +201,23 @@ chmod +x "$SCRIPTS_DIR/install_moonraker.sh"
 chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
 
 # Ensure moonrakeruser has ownership of the /usr/data directory
-sudo chown -R moonrakeruser:moonrakeruser /usr/data
+chown -R moonrakeruser:moonrakeruser /usr/data
 
-# Trigger Moonraker installation script
-su - moonrakeruser -c "$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to install Moonraker"
+# Switch to moonrakeruser and run the install_moonraker.sh script
+su - moonrakeruser << 'EOF'
+# Set PATH to include Entware binaries
+export PATH=$PATH:/opt/bin:/opt/sbin
+
+# Ensure bash is installed
+BASH_PATH=$(which bash)
+if [ -z "$BASH_PATH" ]; then
+    echo "Bash is not installed. Installing bash..."
+    opkg install bash || exit_on_error "Failed to install bash"
+fi
+
+# Run the Moonraker installation script
+sh /usr/data/creality-k1-setup/scripts/install_moonraker.sh
+EOF
 
 # Trigger Nginx setup script
 $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
