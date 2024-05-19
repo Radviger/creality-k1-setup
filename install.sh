@@ -200,8 +200,11 @@ fi
 chmod +x "$SCRIPTS_DIR/install_moonraker.sh"
 chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
 
+# Ensure moonrakeruser has ownership of the /usr/data directory
+sudo chown -R moonrakeruser:moonrakeruser /usr/data
+
 # Trigger Moonraker installation script
-su moonrakeruser -c "$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to install Moonraker"
+su - moonrakeruser -c "$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to install Moonraker"
 
 # Trigger Nginx setup script
 $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
