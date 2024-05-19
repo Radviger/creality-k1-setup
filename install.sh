@@ -67,6 +67,10 @@ fi
 echo "Upgrading pip to the latest version..."
 pip3 install --upgrade pip || exit_on_error "Failed to upgrade pip"
 
+# Set TMPDIR to a directory under /usr/data to avoid running out of space
+export TMPDIR="/usr/data/tmp"
+mkdir -p "$TMPDIR"
+
 # Function to check if a Python package is installed
 is_python_package_installed() {
     pip3 show "$1" > /dev/null 2>&1
