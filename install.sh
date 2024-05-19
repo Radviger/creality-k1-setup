@@ -52,7 +52,7 @@ if [ ! -d "$PACKAGES_DIR/ipk" ]; then
     exit_on_error "The directory $PACKAGES_DIR/ipk does not exist. Please create it and add the required .ipk files."
 fi
 
-# Check for Python version compatibility and upgrade Python and pip if necessary
+# Check for Python version compatibility
 echo "Checking Python version..."
 python_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 required_python_version="3.6"
@@ -201,7 +201,7 @@ chmod +x "$SCRIPTS_DIR/install_moonraker.sh"
 chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
 
 # Trigger Moonraker installation script
-$SCRIPTS_DIR/install_moonraker.sh || exit_on_error "Failed to install Moonraker"
+su moonrakeruser -c "$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to install Moonraker"
 
 # Trigger Nginx setup script
 $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"

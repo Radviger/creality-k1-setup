@@ -48,6 +48,13 @@ echo "Modifying install-moonraker.sh to work without sudo and apt-get..."
 sed -i 's/sudo //g' ./scripts/install-moonraker.sh
 sed -i '/apt-get/d' ./scripts/install-moonraker.sh
 
+# Ensure virtualenv is installed
+VIRTUALENV_PATH=$(which virtualenv)
+if [ -z "$VIRTUALENV_PATH" ]; then
+    echo "virtualenv is not installed. Installing virtualenv..."
+    pip3 install virtualenv || exit_on_error "Failed to install virtualenv"
+fi
+
 # Switch to moonrakeruser before creating the virtual environment and installing packages
 su moonrakeruser <<'EOF'
 # Set the working directory for moonrakeruser
@@ -64,7 +71,7 @@ export TMPDIR="$TMPDIR"
 
 # Create virtual environment using virtualenv.py directly
 echo "Creating virtual environment..."
-python3 -m virtualenv $VENV_DIR || exit_on_error "Failed to create virtual environment"
+virtualenv -p /usr/bin/python3 $VENV_DIR || exit_on_error "Failed to create virtual environment"
 
 # Activate virtual environment
 echo "Activating virtual environment..."
