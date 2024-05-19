@@ -62,16 +62,19 @@ mkdir -p "$TMPDIR"
 # Export TMPDIR to use during pip installations
 export TMPDIR="$TMPDIR"
 
+# Create virtual environment using virtualenv.py directly
+echo "Creating virtual environment..."
+python3 -m virtualenv $VENV_DIR || exit_on_error "Failed to create virtual environment"
+
+# Activate virtual environment
+echo "Activating virtual environment..."
+source $VENV_DIR/bin/activate
+
 # Upgrade pip within the virtual environment
 pip install --upgrade pip || exit_on_error "Failed to upgrade pip"
 
-# Create virtual environment using virtualenv.py directly
-echo "Creating virtual environment..."
-python3 /usr/lib/python3.8/site-packages/virtualenv.py -p /usr/bin/python3 $VENV_DIR || exit_on_error "Failed to create virtual environment"
-
-# Activate virtual environment and install requirements
-echo "Activating virtual environment and installing requirements..."
-source $VENV_DIR/bin/activate
+# Install Moonraker requirements
+echo "Installing Moonraker requirements..."
 pip install --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host files.pythonhosted.org -r $MOONRAKER_DIR/scripts/moonraker-requirements.txt || exit_on_error "Failed to install Moonraker requirements"
 
 # Set environment variable to use system lmdb

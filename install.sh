@@ -63,10 +63,6 @@ else
     echo "Python version is $python_version, which is compatible."
 fi
 
-# Upgrade pip
-echo "Upgrading pip to the latest version..."
-pip3 install --upgrade pip || exit_on_error "Failed to upgrade pip"
-
 # Set TMPDIR to a directory under /usr/data to avoid running out of space
 export TMPDIR="/usr/data/tmp"
 mkdir -p "$TMPDIR"
