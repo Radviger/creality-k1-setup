@@ -3,11 +3,6 @@
 # Source the centralized configuration file
 source ./config.sh
 
-# MJ: This script performs the initial setup by checking the internet connection,
-# checking if Moonraker is already running, setting up working directories,
-# backing up, and ensuring the printer.cfg file. It also triggers the verification
-# and service start scripts as necessary.
-
 # Function to print a warning
 warn() {
     echo "WARNING: $1"
@@ -22,7 +17,7 @@ exit_on_error() {
 # Check if connected to the internet
 ping -c 1 google.com > /dev/null 2>&1
 if [ $? -ne 0 ]; then
-    exit_on_error "No internet connection. Please download the necessary packages manually. See the text files (requirements/requirements.txt, requirements/requirements_pypi.txt, requirements/ipk-packages.txt) for the list of packages."
+    exit_on_error "No internet connection. Please download the necessary packages manually."
 else
     echo "Internet connection verified."
 fi
@@ -31,25 +26,26 @@ fi
 if ps aux | grep '[m]oonraker' > /dev/null; then
     echo "Moonraker is already running. Configuring Fluidd and Mainsail with the existing Moonraker service."
 
+    # Ensure scripts are executable
+    chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
+
     # Trigger Nginx setup script
-    ./scripts/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+    $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
     exit 0
 fi
 
 echo "Moonraker is not running. Proceeding with full installation."
 
-# Verify that the 'packages' directory exists
-if [ ! -d "$PACKAGES_DIR" ]; then
-    exit_on_error "The directory $PACKAGES_DIR does not exist. Please ensure the repository is cloned correctly."
-fi
+# Ensure necessary directories exist
+mkdir -p "$PACKAGES_DIR/python" "$PACKAGES_DIR/ipk" "$FLUIDD_KLIPPER_CFG_DIR" "$TMPDIR"
 
 # Verify that the 'python' and 'ipk' directories exist under 'packages'
 if [ ! -d "$PACKAGES_DIR/python" ]; then
-    exit_on_error "The directory $PACKAGES_DIR/python does not exist. Please create it and add the required .whl files."
+    exit_on_error "The directory $PACKAGES_DIR/python does not exist."
 fi
 
 if [ ! -d "$PACKAGES_DIR/ipk" ]; then
-    exit_on_error "The directory $PACKAGES_DIR/ipk does not exist. Please create it and add the required .ipk files."
+    exit_on_error "The directory $PACKAGES_DIR/ipk does not exist."
 fi
 
 # Check for Python version compatibility
@@ -63,10 +59,6 @@ else
     echo "Python version is $python_version, which is compatible."
 fi
 
-# Set TMPDIR to a directory under /usr/data to avoid running out of space
-export TMPDIR="/usr/data/tmp"
-mkdir -p "$TMPDIR"
-
 # Function to check if a Python package is installed
 is_python_package_installed() {
     pip3 show "$1" > /dev/null 2>&1
@@ -79,8 +71,8 @@ is_ipk_package_installed() {
     return $?
 }
 
-# Verify that the required .whl files exist in the 'python' directory and try to install them if they don't
-verify_and_install_whl_files() {
+# Install necessary .whl files
+install_whl_files() {
     for file in "$@"; do
         package_name=$(echo "$file" | sed 's/-[0-9].*//')
         if [ ! -f "$PACKAGES_DIR/python/$file" ]; then
@@ -96,7 +88,7 @@ verify_and_install_whl_files() {
     done
 }
 
-verify_and_install_whl_files \
+install_whl_files \
     "zipp-3.18.1-py3-none-any.whl" \
     "typing_extensions-4.11.0-py3-none-any.whl" \
     "tomli-2.0.1-py3-none-any.whl" \
@@ -127,7 +119,6 @@ install_from_source_or_alternative() {
             pip3 install virtualenv || exit_on_error "Failed to install virtualenv"
             ;;
         python3-dev)
-            # No direct way to install python3-dev via pip, so we'll skip this as it is likely not required directly for Moonraker
             echo "Skipping python3-dev as it's not installable via pip"
             ;;
         liblmdb-dev)
@@ -140,22 +131,18 @@ install_from_source_or_alternative() {
             pip3 install libnacl || warn "Failed to install libnacl, this might impact functionality depending on its usage"
             ;;
         zlib1g-dev)
-            # Typically part of the Python standard library, ensuring zlib is available
             python3 -c "import zlib" || exit_on_error "zlib not available in Python standard library"
             ;;
         libjpeg-dev)
             pip3 install pillow || exit_on_error "Failed to install pillow (includes support for libjpeg)"
             ;;
         packagekit)
-            # No direct equivalent, ensure required functionality via pip packages
             echo "Skipping packagekit as there's no direct equivalent"
             ;;
         wireless-tools)
-            # No direct equivalent, ensure required functionality via pip packages
             echo "Skipping wireless-tools as there's no direct equivalent"
             ;;
         curl)
-            # Ensure curl is installed via Entware
             opkg install curl || exit_on_error "Failed to install curl"
             ;;
         *)
