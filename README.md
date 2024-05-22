@@ -29,7 +29,7 @@ The Creality K1 and K1-Max 3D printers run on a restricted environment. This gui
 ## Installing Entware
 
 1. **Download and Install Entware:**
-   - SSH into your Creality K1 or K1-Max printer ( see below how to do it with Putty).
+   - SSH into your Creality K1 or K1-Max printer (see below how to do it with PuTTY).
    - Run the following commands to install Entware:
 
      ```sh
@@ -38,11 +38,6 @@ The Creality K1 and K1-Max 3D printers run on a restricted environment. This gui
      sh generic.sh
      ```
 
-2. **Initialize and Update Entware:**
-
-   ```sh
-   /opt/bin/opkg update
-   /opt/bin/opkg upgrade
 ## Setting Up the Environment
 
 Follow the steps below to set up the environment for Mainsail and Fluidd.
@@ -112,9 +107,9 @@ After setting up the prerequisites and installing Entware, proceed with the step
     ./install.sh
     ```
 
-### Removing the Setup Directory:
+## Conclusion and Troubleshooting
 
-If you need to remove the setup directory, run the following commands:
+Follow the above steps to set up Mainsail and Fluidd on your Creality K1 or K1-Max. If you encounter any issues, ensure all steps were followed correctly and refer to the repository for updates or additional troubleshooting steps. If you need to remove the setup directory, run the following commands:
 
 1. Navigate to the `/usr/data` directory:
 
@@ -128,8 +123,4 @@ If you need to remove the setup directory, run the following commands:
     rm -rf creality-k1-setup/
     ```
 
-## Conclusion and Troubleshooting
-
-Follow the above steps to set up Mainsail and Fluidd on your Creality K1 or K1-Max. If you encounter any issues, ensure all steps were followed correctly and refer to the repository for updates or additional troubleshooting steps.
-
-
+By following these instructions, you will set up a fully functional environment with Mainsail and Fluidd on your Creality K1 or K1-Max 3D printer.
