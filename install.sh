@@ -22,6 +22,50 @@ else
     echo "Internet connection verified."
 fi
 
+# Ensure necessary system packages are installed
+echo "Checking and installing required system packages..."
+opkg update
+opkg install sudo bash
+
+# Fix sudo permissions
+echo "Fixing sudo permissions..."
+chown root:root /opt/bin/sudo
+chmod 4755 /opt/bin/sudo
+if [ -f "/opt/lib/sudo/sudoers.so" ]; then
+    chown root:root /opt/lib/sudo/sudoers.so
+    chmod 644 /opt/lib/sudo/sudoers.so
+fi
+
+# Create sudo configuration
+mkdir -p /opt/etc
+cat > /opt/etc/sudoers << 'EOF'
+# /etc/sudoers
+#
+# This file MUST be edited with the 'visudo' command as root.
+#
+# See the man page for details on how to write a sudoers file.
+#
+
+Defaults        env_reset
+
+# Host alias specification
+
+# User alias specification
+
+# Cmnd alias specification
+
+# User privilege specification
+root    ALL=(ALL) ALL
+moonrakeruser ALL=(ALL) NOPASSWD: ALL
+
+# Allow members of group sudo to execute any command
+%sudo   ALL=(ALL) ALL
+EOF
+
+# Set proper permissions for sudoers file
+chown root:root /opt/etc/sudoers
+chmod 440 /opt/etc/sudoers
+
 # Check if Moonraker is already running
 if ps aux | grep '[m]oonraker' > /dev/null; then
     echo "Moonraker is already running. Configuring Fluidd and Mainsail with the existing Moonraker service."
@@ -41,11 +85,13 @@ mkdir -p "$PACKAGES_DIR/python" "$PACKAGES_DIR/ipk" "$FLUIDD_KLIPPER_CFG_DIR" "$
 
 # Verify that the 'python' and 'ipk' directories exist under 'packages'
 if [ ! -d "$PACKAGES_DIR/python" ]; then
-    exit_on_error "The directory $PACKAGES_DIR/python does not exist."
+    mkdir -p "$PACKAGES_DIR/python"
+    echo "Created directory $PACKAGES_DIR/python"
 fi
 
 if [ ! -d "$PACKAGES_DIR/ipk" ]; then
-    exit_on_error "The directory $PACKAGES_DIR/ipk does not exist."
+    mkdir -p "$PACKAGES_DIR/ipk"
+    echo "Created directory $PACKAGES_DIR/ipk"
 fi
 
 # Check for Python version compatibility
@@ -183,62 +229,34 @@ else
     exit_on_error "No printer.cfg found to copy."
 fi
 
+# Ensure scripts directory exists
+if [ ! -d "$SCRIPTS_DIR" ]; then
+    exit_on_error "Scripts directory not found at $SCRIPTS_DIR. Please check your repository structure."
+fi
+
 # Ensure scripts are executable
-chmod +x "$SCRIPTS_DIR/install_moonraker.sh"
-chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
+chmod +x "$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to make install_moonraker.sh executable"
+chmod +x "$SCRIPTS_DIR/setup_nginx.sh" || exit_on_error "Failed to make setup_nginx.sh executable"
+
+# Create moonrakeruser if it doesn't exist
+if ! id "moonrakeruser" >/dev/null 2>&1; then
+    echo "Creating user moonrakeruser..."
+    adduser -h /usr/data/home/moonrakeruser -D moonrakeruser || exit_on_error "Failed to create user moonrakeruser"
+else
+    echo "User moonrakeruser already exists."
+fi
 
 # Ensure moonrakeruser has ownership of the /usr/data directory
 chown -R moonrakeruser:moonrakeruser /usr/data
 
-# Function to verify if moonrakeruser has necessary permissions
-verify_moonrakeruser_permissions() {
-    su - moonrakeruser << 'EOF'
-    # Set PATH to include Entware binaries
-    export PATH=$PATH:/opt/bin:/opt/sbin
-
-    # Ensure bash is installed
-    BASH_PATH=$(which bash)
-    if [ -z "$BASH_PATH" ]; then
-        echo "Bash is not installed. Installing bash..."
-        opkg install bash || exit_on_error "Failed to install bash"
-    fi
-
-    # Check if sudo is installed
-    SUDO_PATH=$(which sudo)
-    if [ -z "$SUDO_PATH" ]; then
-        echo "Sudo is not installed. Installing sudo..."
-        opkg install sudo || exit_on_error "Failed to install sudo"
-    fi
-
-    # Verify sudo permissions
-    echo "Verifying sudo permissions for moonrakeruser..."
-    echo "moonrakeruser ALL=(ALL) NOPASSWD: ALL" | sudo EDITOR='tee -a' visudo
-
-    # Verify sudo and bash installations
-    sudo bash -c "echo 'Sudo and Bash are working for moonrakeruser'"
-EOF
-}
-
-# Fix sudo ownership and permissions
-chown root:root /opt/bin/sudo
-chmod 4755 /opt/bin/sudo
-
-# Verify moonrakeruser permissions
-verify_moonrakeruser_permissions || exit_on_error "Failed to verify moonrakeruser permissions"
-
 # Switch to moonrakeruser and run the install_moonraker.sh script
-su - moonrakeruser << 'EOF'
-# Set PATH to include Entware binaries
-export PATH=$PATH:/opt/bin:/opt/sbin
-
-# Run the Moonraker installation script
-sh /usr/data/creality-k1-setup/scripts/install_moonraker.sh
-EOF
+echo "Running install_moonraker.sh as moonrakeruser..."
+su - moonrakeruser -c "sh $SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to run install_moonraker.sh as moonrakeruser"
 
 # Check if Nginx is installed
-NGINX_PATH="/opt/sbin/nginx"
-if [ -z "$NGINX_PATH" ]; then
+if ! which nginx >/dev/null; then
     # Trigger Nginx setup script
+    echo "Running setup_nginx.sh..."
     $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
 else
     echo "Nginx is already installed. Configuring existing Nginx..."
@@ -271,4 +289,5 @@ EOF
     /opt/etc/init.d/S80nginx restart || exit_on_error "Failed to restart Nginx"
 fi
 
-echo "Installation complete! Mainsail is running on port 80, and Fluidd is running on port 80 under /fluidd."
+echo "Installation complete! Mainsail and Fluidd are installed."
+echo "You can access Mainsail at http://your_printer_ip/mainsail and Fluidd at http://your_printer_ip/fluidd"
