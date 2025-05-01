@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# Creality K1 Compatible Moonraker/Nginx Installation Script
-# Based on official Creality K1 Series Annex repository files
+# Automated Moonraker/Nginx Installation Script for Creality K1
+# Includes automatic UI download and correct Nginx configuration
 
 # Exit on errors
 set -e
@@ -47,8 +47,8 @@ cleanup() {
     print_status "Cleaning up any previous installation files"
     
     # Stop existing services
-    pkill -f "moonraker.py" || true
-    pkill -f "nginx" || true
+    killall -q moonraker 2>/dev/null || true
+    killall -q nginx 2>/dev/null || true
     
     # Clean up temporary files
     rm -rf "${TMPDIR:?}"/*
@@ -202,241 +202,90 @@ EOF
     echo "Moonraker configuration created"
 }
 
-# Create Nginx configuration
+# Create Nginx configuration with proper structure
 create_nginx_config() {
     print_status "Creating Nginx configuration"
     
     mkdir -p /opt/etc/nginx
     
     cat > /opt/etc/nginx/nginx.conf << 'EOF'
-#user  nobody;
-worker_processes  1;
-
-#error_log  logs/error.log;
-#error_log  logs/error.log  notice;
-#error_log  logs/error.log  info;
-
-#pid        logs/nginx.pid;
-
+worker_processes 1;
 
 events {
-    worker_connections  1024;
+    worker_connections 1024;
 }
 
-
 http {
-    include       mime.types;
-    default_type  application/octet-stream;
-
-    #log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
-    #                  '$status $body_bytes_sent "$http_referer" '
-    #                  '"$http_user_agent" "$http_x_forwarded_for"';
-
-    #access_log  logs/access.log  main;
-
-    sendfile        on;
-    #tcp_nopush     on;
-
-    #keepalive_timeout  0;
-    keepalive_timeout  65;
-
-    #gzip  on;
+    include mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
 
     server {
-        listen 4408 default_server;
-
-        #access_log /var/log/nginx/fluidd-access.log;
-        #error_log /var/log/nginx/fluidd-error.log;
-
-        # disable this section on smaller hardware like a pi zero
-        gzip on;
-        gzip_vary on;
-        gzip_proxied any;
-        gzip_proxied expired no-cache no-store private auth;
-        gzip_comp_level 4;
-        gzip_buffers 16 8k;
-        gzip_http_version 1.1;
-        gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/json application/xml;
-
-        # web_path from fluidd static files
+        listen 4408;
         root /usr/data/fluidd;
-
-        index index.html;
-        server_name _;
-
-        # disable max upload size checks
-        client_max_body_size 0;
-
-        # disable proxy request buffering
-        proxy_request_buffering off;
-
+        
         location / {
             try_files $uri $uri/ /index.html;
         }
-
+        
         location = /index.html {
             add_header Cache-Control "no-store, no-cache, must-revalidate";
         }
-
+        
         location /websocket {
-            proxy_pass http://apiserver/websocket;
+            proxy_pass http://127.0.0.1:7125/websocket;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection $connection_upgrade;
             proxy_set_header Host $http_host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_read_timeout 86400;
         }
-
+        
         location ~ ^/(printer|api|access|machine|server)/ {
-            proxy_pass http://apiserver$request_uri;
+            proxy_pass http://127.0.0.1:7125;
+            proxy_http_version 1.1;
             proxy_set_header Host $http_host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Scheme $scheme;
-        }
-
-        location /webcam/ {
-            proxy_pass http://mjpgstreamer1/;
-        }
-
-        location /webcam2/ {
-            proxy_pass http://mjpgstreamer2/;
-        }
-
-        location /webcam3/ {
-            proxy_pass http://mjpgstreamer3/;
-        }
-
-        location /webcam4/ {
-            proxy_pass http://mjpgstreamer4/;
         }
     }
-
+    
     server {
-        listen 4409 default_server;
-        # uncomment the next line to activate IPv6
-        # listen [::]:80 default_server;
-
-        #access_log /var/log/nginx/mainsail-access.log;
-        #error_log /var/log/nginx/mainsail-error.log;
-
-        # disable this section on smaller hardware like a pi zero
-        gzip on;
-        gzip_vary on;
-        gzip_proxied any;
-        gzip_proxied expired no-cache no-store private auth;
-        gzip_comp_level 4;
-        gzip_buffers 16 8k;
-        gzip_http_version 1.1;
-        gzip_types text/plain text/css text/xml text/javascript application/javascript application/x-javascript application/json application/xml;
-
-        # web_path from mainsail static files
+        listen 4409;
         root /usr/data/mainsail;
-
-        index index.html;
-        server_name _;
-
-        # disable max upload size checks
-        client_max_body_size 0;
-
-        # disable proxy request buffering
-        proxy_request_buffering off;
-
+        
         location / {
             try_files $uri $uri/ /index.html;
         }
-
+        
         location = /index.html {
             add_header Cache-Control "no-store, no-cache, must-revalidate";
         }
-
+        
         location /websocket {
-            proxy_pass http://apiserver/websocket;
+            proxy_pass http://127.0.0.1:7125/websocket;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection $connection_upgrade;
             proxy_set_header Host $http_host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_read_timeout 86400;
         }
-
+        
         location ~ ^/(printer|api|access|machine|server)/ {
-            proxy_pass http://apiserver$request_uri;
+            proxy_pass http://127.0.0.1:7125;
             proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Host $http_host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Scheme $scheme;
-        }
-
-        location /webcam/ {
-            postpone_output 0;
-            proxy_buffering off;
-            proxy_ignore_headers X-Accel-Buffering;
-            access_log off;
-            error_log off;
-            proxy_pass http://mjpgstreamer1/;
-        }
-
-        location /webcam2/ {
-            postpone_output 0;
-            proxy_buffering off;
-            proxy_ignore_headers X-Accel-Buffering;
-            access_log off;
-            error_log off;
-            proxy_pass http://mjpgstreamer2/;
-        }
-
-        location /webcam3/ {
-            postpone_output 0;
-            proxy_buffering off;
-            proxy_ignore_headers X-Accel-Buffering;
-            access_log off;
-            error_log off;
-            proxy_pass http://mjpgstreamer3/;
-        }
-
-        location /webcam4/ {
-            postpone_output 0;
-            proxy_buffering off;
-            proxy_ignore_headers X-Accel-Buffering;
-            access_log off;
-            error_log off;
-            proxy_pass http://mjpgstreamer4/;
         }
     }
-
+    
     map $http_upgrade $connection_upgrade {
         default upgrade;
         '' close;
-    }
-    upstream apiserver {
-        ip_hash;
-        server 127.0.0.1:7125;
-    }
-
-    upstream mjpgstreamer1 {
-        ip_hash;
-        server 127.0.0.1:8080;
-    }
-
-    upstream mjpgstreamer2 {
-        ip_hash;
-        server 127.0.0.1:8081;
-    }
-
-    upstream mjpgstreamer3 {
-        ip_hash;
-        server 127.0.0.1:8082;
-    }
-
-    upstream mjpgstreamer4 {
-        ip_hash;
-        server 127.0.0.1:8083;
     }
 }
 EOF
@@ -452,7 +301,7 @@ create_moonraker_service() {
 #!/bin/sh
 
 # Kill any existing Moonraker process
-pkill -f "moonraker.py" || true
+killall -q moonraker 2>/dev/null || true
 
 # Start Moonraker
 cd /usr/data/moonraker
@@ -466,22 +315,57 @@ EOF
     echo "Moonraker service script created at ${USR_DATA}/start_moonraker.sh"
 }
 
-# Create placeholders for the UIs
-create_ui_placeholders() {
-    print_status "Creating UI placeholders"
+# Download Fluidd UI
+download_fluidd() {
+    print_status "Downloading Fluidd UI"
     
-    # Create placeholder for Fluidd
-    echo '<html><body><h1>Fluidd Placeholder</h1><p>The actual UI has not been downloaded yet.</p><p>Please use /usr/data/download_ui.sh to download it.</p></body></html>' > "${FLUIDD_DIR}/index.html"
+    cd "${USR_DATA}" || exit_on_error "Failed to change to ${USR_DATA}"
     
-    # Create placeholder for Mainsail
-    echo '<html><body><h1>Mainsail Placeholder</h1><p>The actual UI has not been downloaded yet.</p><p>Please use /usr/data/download_ui.sh to download it.</p></body></html>' > "${MAINSAIL_DIR}/index.html"
+    echo "Downloading Fluidd..."
+    wget --no-check-certificate -O fluidd.zip https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip || {
+        echo "Warning: Failed to download Fluidd, will use placeholder instead"
+        echo '<html><body><h1>Fluidd Placeholder</h1><p>Failed to download UI. Please try again later.</p></body></html>' > "${FLUIDD_DIR}/index.html"
+        return 1
+    }
     
-    echo "UI placeholders created"
+    echo "Extracting Fluidd..."
+    rm -rf "${FLUIDD_DIR:?}"/*
+    unzip -o fluidd.zip -d "${FLUIDD_DIR}" || {
+        echo "Warning: Failed to extract Fluidd"
+        return 1
+    }
+    
+    rm -f fluidd.zip
+    echo "Fluidd installed successfully!"
 }
 
-# Create script to download the UI files
+# Download Mainsail UI
+download_mainsail() {
+    print_status "Downloading Mainsail UI"
+    
+    cd "${USR_DATA}" || exit_on_error "Failed to change to ${USR_DATA}"
+    
+    echo "Downloading Mainsail..."
+    wget --no-check-certificate -O mainsail.zip https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip || {
+        echo "Warning: Failed to download Mainsail, will use placeholder instead"
+        echo '<html><body><h1>Mainsail Placeholder</h1><p>Failed to download UI. Please try again later.</p></body></html>' > "${MAINSAIL_DIR}/index.html"
+        return 1
+    }
+    
+    echo "Extracting Mainsail..."
+    rm -rf "${MAINSAIL_DIR:?}"/*
+    unzip -o mainsail.zip -d "${MAINSAIL_DIR}" || {
+        echo "Warning: Failed to extract Mainsail"
+        return 1
+    }
+    
+    rm -f mainsail.zip
+    echo "Mainsail installed successfully!"
+}
+
+# Create UI download script for later use (if needed)
 create_download_script() {
-    print_status "Creating UI download script"
+    print_status "Creating UI download script for later use"
     
     cat > "${USR_DATA}/download_ui.sh" << 'EOF'
 #!/bin/sh
@@ -588,7 +472,7 @@ start_nginx() {
 
 # Main execution
 main() {
-    print_status "Starting installation of Moonraker and Nginx for Creality K1"
+    print_status "Starting installation of Moonraker, Nginx, and UI files for Creality K1"
     
     # Run all installation steps
     cleanup
@@ -597,22 +481,26 @@ main() {
     create_moonraker_config
     create_nginx_config
     create_moonraker_service
-    create_ui_placeholders
     create_download_script
+    
+    # Download UIs automatically
+    download_fluidd
+    download_mainsail
+    
+    # Start services
     start_moonraker
     start_nginx
     
     # Print completion message
     print_status "Installation complete!"
     echo ""
-    echo "Moonraker should now be running on port 7125"
-    echo "You can download the UI files with: /usr/data/download_ui.sh"
+    echo "Moonraker is running on port 7125"
+    echo "UI interfaces are installed and ready to use:"
+    echo "  • Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
+    echo "  • Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
     echo ""
-    echo "After downloading, you can access the UIs at:"
-    echo "  Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
-    echo "  Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
-    echo ""
-    echo "If you need to restart Moonraker, use: /usr/data/start_moonraker.sh"
+    echo "If you need to restart Moonraker: /usr/data/start_moonraker.sh"
+    echo "If you need to reinstall UI files: /usr/data/download_ui.sh"
     echo ""
     echo "Note: The official Creality warning states that running Moonraker"
     echo "for extended periods may cause memory issues on the K1 series."
