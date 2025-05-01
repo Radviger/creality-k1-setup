@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Moonraker Dependencies Fixer for Creality K1/K1-Max
+# This script fixes the missing Python dependencies for Moonraker
+
 # Function to print messages
 print_message() {
   echo "===================================================================="
@@ -8,13 +11,20 @@ print_message() {
   echo ""
 }
 
-# Check if Entware is properly installed
-check_entware() {
+# Create directories
+create_dirs() {
+  print_message "Creating necessary directories"
+  mkdir -p /usr/data/python_deps
+  mkdir -p /usr/data/python_deps/wheels
+  echo "Directories created."
+}
+
+# Install Entware and necessary packages
+install_entware() {
   print_message "Checking Entware installation"
   
   if [ ! -d "/opt" ] || [ ! -f "/opt/bin/opkg" ]; then
-    echo "Entware not found or not properly installed."
-    echo "Installing Entware..."
+    echo "Entware not found. Installing Entware..."
     
     # Navigate to /tmp directory
     cd /tmp
@@ -22,7 +32,7 @@ check_entware() {
     # Remove any existing generic.sh file
     rm -f generic.sh
     
-    # Download the Entware installer without SSL verification
+    # Download the Entware installer
     echo "Downloading Entware installer..."
     wget http://bin.entware.net/mipselsf-k3.4/installer/generic.sh
     
@@ -48,208 +58,68 @@ check_entware() {
   # Add Entware to PATH
   export PATH=$PATH:/opt/bin:/opt/sbin
   
-  # Update and install wget-ssl
-  echo "Updating package lists..."
+  # Install necessary packages
+  echo "Installing necessary packages..."
   /opt/bin/opkg update
-  
-  echo "Installing wget-ssl..."
+  /opt/bin/opkg install python3-pip
   /opt/bin/opkg install wget-ssl
+  /opt/bin/opkg install python3-dev
+  /opt/bin/opkg install gcc
+  /opt/bin/opkg install make
   
-  if [ $? -ne 0 ]; then
-    echo "Failed to install wget-ssl. Will try to use curl instead."
-    /opt/bin/opkg install curl
-  fi
-  
-  # Verify wget-ssl or curl is installed
-  if [ ! -f "/opt/bin/wget-ssl" ] && [ ! -f "/opt/bin/curl" ]; then
-    echo "Neither wget-ssl nor curl could be installed. Cannot continue."
-    exit 1
-  fi
-  
-  echo "SSL-capable downloader installed successfully."
+  echo "Packages installed."
 }
 
-# Function to safely download a file
-download_file() {
-  url="$1"
-  output="$2"
+# Install Python dependencies using pip
+install_python_deps() {
+  print_message "Installing Python dependencies"
   
-  # Try wget-ssl first
-  if [ -f "/opt/bin/wget-ssl" ]; then
-    echo "Downloading with wget-ssl: $url"
-    /opt/bin/wget-ssl --no-check-certificate -O "$output" "$url"
-    return $?
+  # Use pip to install the required packages
+  pip3 install --upgrade pip
+  
+  echo "Installing tornado..."
+  pip3 install tornado==6.1
+  
+  echo "Installing other Moonraker dependencies..."
+  pip3 install pyserial
+  pip3 install jinja2
+  pip3 install pillow
+  pip3 install inotify-simple
+  pip3 install libnacl
+  pip3 install paho-mqtt
+  pip3 install zeroconf
+  pip3 install distro
+  pip3 install lmdb
+  pip3 install apprise
+  pip3 install ldap3
+  pip3 install dbus-next
+  
+  echo "Python dependencies installed."
+}
+
+# Manually create a virtual environment with system packages
+setup_moonraker_env() {
+  print_message "Setting up Moonraker environment"
+  
+  # Check if moonraker directory exists
+  if [ ! -d "/usr/data/moonraker" ]; then
+    echo "Moonraker directory not found at /usr/data/moonraker."
+    echo "Cloning Moonraker repository..."
+    cd /usr/data
+    git clone https://github.com/Arksine/moonraker.git
   fi
   
-  # Try curl as backup
-  if [ -f "/opt/bin/curl" ]; then
-    echo "Downloading with curl: $url"
-    /opt/bin/curl --insecure -L -o "$output" "$url"
-    return $?
+  # Create a virtual environment
+  echo "Creating virtual environment..."
+  if [ -d "/usr/data/moonraker-env" ]; then
+    echo "Removing existing moonraker-env..."
+    rm -rf /usr/data/moonraker-env
   fi
   
-  # If we get here, neither tool worked
-  echo "No download tool available. Cannot download $url"
-  return 1
-}
-
-# Create necessary directories
-create_directories() {
-  print_message "Creating necessary directories"
-  mkdir -p /usr/data/fluidd
-  mkdir -p /usr/data/mainsail
-  mkdir -p /usr/data/printer_data/config
-  mkdir -p /usr/data/printer_data/logs
-  echo "Directories created."
-}
-
-# Download and install Fluidd
-install_fluidd() {
-  print_message "Installing Fluidd"
-  cd /usr/data
+  # Create virtual environment with system packages
+  python3 -m venv --system-site-packages /usr/data/moonraker-env
   
-  # Remove any existing installation
-  rm -rf /usr/data/fluidd/*
-  
-  # Download Fluidd
-  download_file "https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip" "fluidd.zip"
-  
-  if [ $? -eq 0 ]; then
-    echo "Successfully downloaded Fluidd."
-    unzip -o fluidd.zip -d fluidd
-    rm fluidd.zip
-    echo "Fluidd installed successfully!"
-  else
-    echo "Failed to download Fluidd."
-    # Create placeholder file
-    mkdir -p /usr/data/fluidd
-    echo "<html><body><h1>Fluidd Download Failed</h1><p>Please download and install manually.</p></body></html>" > /usr/data/fluidd/index.html
-    return 1
-  fi
-}
-
-# Download and install Mainsail
-install_mainsail() {
-  print_message "Installing Mainsail"
-  cd /usr/data
-  
-  # Remove any existing installation
-  rm -rf /usr/data/mainsail/*
-  
-  # Download Mainsail
-  download_file "https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip" "mainsail.zip"
-  
-  if [ $? -eq 0 ]; then
-    echo "Successfully downloaded Mainsail."
-    unzip -o mainsail.zip -d mainsail
-    rm mainsail.zip
-    echo "Mainsail installed successfully!"
-  else
-    echo "Failed to download Mainsail."
-    # Create placeholder file
-    mkdir -p /usr/data/mainsail
-    echo "<html><body><h1>Mainsail Download Failed</h1><p>Please download and install manually.</p></body></html>" > /usr/data/mainsail/index.html
-    return 1
-  fi
-}
-
-# Configure Nginx with correct ports (4408 for Fluidd, 4409 for Mainsail)
-configure_nginx() {
-  print_message "Configuring Nginx with correct ports (4408/4409)"
-  
-  # Ensure Nginx is installed
-  export PATH=$PATH:/opt/bin:/opt/sbin
-  /opt/bin/opkg install nginx
-  
-  # Create proper Nginx configuration using the correct ports
-  mkdir -p /opt/etc/nginx
-  
-  # Stop any running nginx instances
-  if [ -f "/opt/var/run/nginx.pid" ]; then
-    echo "Stopping existing Nginx instance..."
-    kill -TERM $(cat /opt/var/run/nginx.pid) 2>/dev/null
-    sleep 2
-  fi
-  
-  # Create a proper nginx.conf file with correct ports
-  cat > /opt/etc/nginx/nginx.conf << 'EOF'
-worker_processes 1;
-pid /opt/var/run/nginx.pid;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    include /opt/etc/nginx/mime.types;
-    default_type application/octet-stream;
-    sendfile on;
-    keepalive_timeout 65;
-    gzip on;
-
-    # Fluidd server on port 4408
-    server {
-        listen 4408;
-        server_name _;
-        
-        root /usr/data/fluidd;
-        index index.html;
-        
-        location / {
-            try_files $uri $uri/ /index.html;
-        }
-        
-        location /websocket {
-            proxy_pass http://127.0.0.1:7125/websocket;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $http_host;
-            proxy_read_timeout 86400;
-        }
-        
-        location ~ ^/(printer|api|access|machine|server)/ {
-            proxy_pass http://127.0.0.1:7125;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Scheme $scheme;
-        }
-    }
-
-    # Mainsail server on port 4409
-    server {
-        listen 4409;
-        server_name _;
-        
-        root /usr/data/mainsail;
-        index index.html;
-        
-        location / {
-            try_files $uri $uri/ /index.html;
-        }
-        
-        location /websocket {
-            proxy_pass http://127.0.0.1:7125/websocket;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $http_host;
-            proxy_read_timeout 86400;
-        }
-        
-        location ~ ^/(printer|api|access|machine|server)/ {
-            proxy_pass http://127.0.0.1:7125;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Scheme $scheme;
-        }
-    }
-}
-EOF
-
-  echo "Nginx configuration created."
+  echo "Moonraker environment set up."
 }
 
 # Configure Moonraker
@@ -257,6 +127,8 @@ configure_moonraker() {
   print_message "Configuring Moonraker"
   
   # Create moonraker.conf if it doesn't exist
+  mkdir -p /usr/data/printer_data/config
+  
   if [ ! -f "/usr/data/printer_data/config/moonraker.conf" ]; then
     cat > /usr/data/printer_data/config/moonraker.conf << 'EOF'
 [server]
@@ -305,94 +177,103 @@ EOF
   fi
 }
 
-# Find and detect existing web services
-detect_web_services() {
-  print_message "Detecting existing web services"
+# Test Moonraker
+test_moonraker() {
+  print_message "Testing Moonraker installation"
   
-  echo "Checking for processes using ports 4408 and 4409..."
-  netstat -tulpn 2>/dev/null | grep -E ":4408|:4409"
+  echo "Stopping any existing Moonraker processes..."
+  pkill -f "moonraker.py" || true
   
-  echo ""
-  echo "Checking for running nginx processes..."
-  ps aux | grep nginx | grep -v grep
+  echo "Starting Moonraker..."
+  cd /usr/data/moonraker
+  /usr/data/moonraker-env/bin/python /usr/data/moonraker/moonraker/moonraker.py -d /usr/data/printer_data > /usr/data/printer_data/logs/moonraker.log 2>&1 &
   
-  echo ""
-  echo "Existing Moonraker processes:"
-  ps aux | grep moonraker | grep -v grep
+  # Wait for Moonraker to start
+  sleep 5
+  
+  # Check if Moonraker is running
+  if pgrep -f "moonraker.py" > /dev/null; then
+    echo "Moonraker is running successfully!"
+  else
+    echo "Moonraker failed to start. Checking logs..."
+    tail -n 50 /usr/data/printer_data/logs/moonraker.log
+  fi
 }
 
-# Restart Nginx with the correct configuration
-restart_nginx() {
-  print_message "Starting Nginx with correct ports"
+# Create launcher script
+create_launcher() {
+  print_message "Creating Moonraker launcher script"
   
-  # Kill any existing Nginx processes managed by our installation
-  if [ -f "/opt/var/run/nginx.pid" ]; then
-    echo "Stopping existing Nginx instance..."
-    kill -TERM $(cat /opt/var/run/nginx.pid) 2>/dev/null
-    sleep 2
-  fi
+  cat > /usr/data/start_moonraker.sh << 'EOF'
+#!/bin/sh
+
+# Kill any existing Moonraker process
+pkill -f "moonraker.py" || true
+
+# Start Moonraker
+cd /usr/data/moonraker
+/usr/data/moonraker-env/bin/python /usr/data/moonraker/moonraker/moonraker.py -d /usr/data/printer_data > /usr/data/printer_data/logs/moonraker.log 2>&1 &
+
+echo "Moonraker started!"
+EOF
+
+  chmod +x /usr/data/start_moonraker.sh
   
-  # Check if ports 4408 and 4409 are already in use
-  if netstat -tulpn 2>/dev/null | grep -q ":4408 "; then
-    echo "Warning: Port 4408 is already in use. Fluidd may not be accessible."
-  fi
+  echo "Launcher script created at /usr/data/start_moonraker.sh"
+}
+
+# Install Moonraker as a service
+install_service() {
+  print_message "Installing Moonraker service"
   
-  if netstat -tulpn 2>/dev/null | grep -q ":4409 "; then
-    echo "Warning: Port 4409 is already in use. Mainsail may not be accessible."
-  fi
+  # Create systemd service or init.d script
+  cat > /etc/init.d/moonraker << 'EOF'
+#!/bin/sh /etc/rc.common
+
+START=99
+USE_PROCD=1
+
+start_service() {
+    procd_open_instance
+    procd_set_param command /usr/data/moonraker-env/bin/python /usr/data/moonraker/moonraker/moonraker.py -d /usr/data/printer_data
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+}
+EOF
+
+  chmod +x /etc/init.d/moonraker
   
-  # Start Nginx
-  echo "Starting Nginx..."
-  /opt/sbin/nginx -c /opt/etc/nginx/nginx.conf
-  
-  if [ $? -eq 0 ]; then
-    echo "Nginx started successfully on ports 4408 and 4409."
-  else
-    echo "Failed to start Nginx. Please check the logs."
-    echo "You can try stopping any existing services using these ports, then start Nginx manually:"
-    echo "/opt/sbin/nginx -c /opt/etc/nginx/nginx.conf"
-  fi
+  echo "Moonraker service installed."
+  echo "You can start it with: /etc/init.d/moonraker start"
 }
 
 # Main function
 main() {
-  print_message "Starting Creality K1/K1-Max Mainsail/Fluidd Installer (Correct Ports)"
+  print_message "Starting Moonraker Dependencies Fixer"
   
-  # Check Entware and install SSL-capable downloader
-  check_entware
-  
-  # Create directories
-  create_directories
-  
-  # Install Fluidd and Mainsail
-  install_fluidd
-  install_mainsail
-  
-  # Detect existing web services
-  detect_web_services
-  
-  # Configure services
-  configure_nginx
+  create_dirs
+  install_entware
+  install_python_deps
+  setup_moonraker_env
   configure_moonraker
-  
-  # Restart Nginx
-  restart_nginx
+  create_launcher
+  install_service
+  test_moonraker
   
   # Final message
   print_message "Installation complete!"
-  echo "You can now access:"
+  echo "If Moonraker is now running, you can connect using:"
   echo "- Fluidd at: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
   echo "- Mainsail at: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
   echo ""
-  echo "If you encounter any issues:"
-  echo "1. Check that Moonraker is running:"
-  echo "   ps aux | grep moonraker"
-  echo "2. If not, start it manually:"
-  echo "   python3 /usr/data/moonraker/moonraker/moonraker.py -d /usr/data/printer_data"
-  echo "3. If Nginx failed to start, check for other services using the ports:"
-  echo "   netstat -tulpn | grep -E ':4408|:4409'"
+  echo "If Moonraker is not running, you can start it with:"
+  echo "/usr/data/start_moonraker.sh"
   echo ""
-  echo "Enjoy!"
+  echo "You can also try to start the service with:"
+  echo "/etc/init.d/moonraker start"
+  echo ""
+  echo "Check logs at: /usr/data/printer_data/logs/moonraker.log"
 }
 
 # Run the main function
