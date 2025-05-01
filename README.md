@@ -34,7 +34,11 @@ The Creality K1 and K1-Max 3D printers run on a restricted environment. This gui
 
      ```sh
      cd /tmp
+     ```
+     ```sh
      wget http://bin.entware.net/mipselsf-k3.4/installer/generic.sh
+     ```
+      ```sh
      sh generic.sh
      ```
 
@@ -84,7 +88,7 @@ After setting up the prerequisites and installing Entware, proceed with the step
 3. Clone the repository:
 
     ```sh
-    git clone https://github.com/your-repo/creality-k1-setup.git
+    git clone https://github.com/Mariusjuvet1/creality-k1-setup.git
     ```
 
 ### Set Permissions and Run the Install Script:
