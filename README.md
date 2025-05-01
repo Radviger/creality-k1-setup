@@ -1,70 +1,54 @@
 # Creality K1 and K1-Max Setup for Mainsail and Fluidd
 
-This guide will help you install Mainsail and Fluidd on your Creality K1 or K1-Max 3D printer with a single installation script.
+A simple guide to install Mainsail and Fluidd on your Creality K1 or K1-Max 3D printer.
 
-## One-Command Installation
+## Quick Installation (Recommended)
 
-SSH into your printer and run this single command:
+1. **Connect to your printer**
 
-```bash
-wget -O - https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/easy_install.sh | sh
-```
+   Connect to your printer using SSH:
+   - Username: `root`
+   - Password: `creality_2023`
 
-That's it! The script will handle everything else automatically.
+2. **Run this single command**
 
-## Manual Installation Steps
+   ```
+   wget -O - https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/easy_install.sh | sh
+   ```
 
-If you prefer to install manually, follow these steps:
+   That's it! The script will handle everything else.
 
-### Step 1: SSH into your printer
-Use PuTTY on Windows, or Terminal on Mac/Linux to connect to your printer:
-- **Address**: Your printer's IP address
-- **Username**: `root`
-- **Password**: `creality_2023`
+3. **Access your new interfaces**
 
-### Step 2: Clone and run the setup
-Copy and paste these commands:
+   When installation completes, open these in your browser:
+   - Mainsail: `http://your_printer_ip/mainsail`
+   - Fluidd: `http://your_printer_ip/fluidd`
 
-```bash
-cd /usr/data
-mkdir -p creality-k1-setup
-cd creality-k1-setup
-wget https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/install.sh
-wget https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/config.sh
-mkdir -p scripts
-cd scripts
-wget https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/scripts/install_moonraker.sh
-wget https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/scripts/setup_nginx.sh
-wget https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/scripts/verify_packages.sh
-cd ..
-chmod +x install.sh
-chmod +x scripts/*.sh
-./install.sh
-```
+## How to Connect to Your Printer
 
-Wait for the installation to complete - this might take several minutes.
+### Finding Your Printer's IP Address
 
-### Step 3: Access your new interfaces
-
-After installation is complete, you can access:
-- Mainsail: `http://your_printer_ip/mainsail`
-- Fluidd: `http://your_printer_ip/fluidd`
-
-## Finding your printer's IP address
-
-From your printer's touchscreen:
+Look on your printer's touchscreen:
 1. Go to **Settings**
 2. Tap **Network Settings**
-3. Your IP address will be shown on this screen
+3. Note the IP address shown
 
-## Using PuTTY to SSH (Windows users)
+### Connecting with SSH
 
-1. Download PuTTY from [putty.org](https://www.putty.org/)
+#### Windows Users
+1. Download [PuTTY](https://www.putty.org/)
 2. Open PuTTY
-3. In "Host Name" field, enter `root@<your_printer_ip>` (replace with your printer's IP)
+3. In "Host Name" field, enter: `root@YOUR_PRINTER_IP`
 4. Click "Open"
-5. Enter password: `creality_2023` when prompted
+5. Enter password: `creality_2023`
 
-## Need help?
+#### Mac/Linux Users
+Open Terminal and type:
+```
+ssh root@YOUR_PRINTER_IP
+```
+Enter password: `creality_2023`
 
-If you encounter issues, please check our [Troubleshooting Guide](https://github.com/Mariusjuvet1/creality-k1-setup/blob/main/Troubleshooting%20Guide%20for%20Creality%20K1%20and%20K1-Max%20Setup) or open an issue on the GitHub repository.
+## Need Help?
+
+If you have problems, check our [Troubleshooting Guide](https://github.com/Mariusjuvet1/creality-k1-setup/blob/main/Troubleshooting%20Guide%20for%20Creality%20K1%20and%20K1-Max%20Setup).
