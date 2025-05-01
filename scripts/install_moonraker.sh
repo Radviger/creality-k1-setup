@@ -153,18 +153,25 @@ install_mainsail() {
   fi
 }
 
-# Configure Nginx on alternative ports
+# Configure Nginx with correct ports (4408 for Fluidd, 4409 for Mainsail)
 configure_nginx() {
-  print_message "Configuring Nginx on alternative ports"
+  print_message "Configuring Nginx with correct ports (4408/4409)"
   
   # Ensure Nginx is installed
   export PATH=$PATH:/opt/bin:/opt/sbin
   /opt/bin/opkg install nginx
   
-  # Create proper Nginx configuration using alternative ports
+  # Create proper Nginx configuration using the correct ports
   mkdir -p /opt/etc/nginx
   
-  # Create a proper nginx.conf file with alternative ports (8080)
+  # Stop any running nginx instances
+  if [ -f "/opt/var/run/nginx.pid" ]; then
+    echo "Stopping existing Nginx instance..."
+    kill -TERM $(cat /opt/var/run/nginx.pid) 2>/dev/null
+    sleep 2
+  fi
+  
+  # Create a proper nginx.conf file with correct ports
   cat > /opt/etc/nginx/nginx.conf << 'EOF'
 worker_processes 1;
 pid /opt/var/run/nginx.pid;
@@ -180,44 +187,63 @@ http {
     keepalive_timeout 65;
     gzip on;
 
-    # Main server on port 8080 to avoid conflicts
+    # Fluidd server on port 4408
     server {
-        listen 8080;
+        listen 4408;
         server_name _;
         
-        # Fluidd
-        location /fluidd/ {
-            alias /usr/data/fluidd/;
-            index index.html;
-            try_files $uri $uri/ /fluidd/index.html;
+        root /usr/data/fluidd;
+        index index.html;
+        
+        location / {
+            try_files $uri $uri/ /index.html;
         }
-
-        # Mainsail
-        location /mainsail/ {
-            alias /usr/data/mainsail/;
-            index index.html;
-            try_files $uri $uri/ /mainsail/index.html;
-        }
-
-        # Moonraker
-        location /moonraker/ {
-            proxy_pass http://127.0.0.1:7125/;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Scheme $scheme;
-        }
-
-        # Moonraker websocket
-        location /moonraker/websocket {
+        
+        location /websocket {
             proxy_pass http://127.0.0.1:7125/websocket;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
             proxy_set_header Host $http_host;
+            proxy_read_timeout 86400;
+        }
+        
+        location ~ ^/(printer|api|access|machine|server)/ {
+            proxy_pass http://127.0.0.1:7125;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Scheme $scheme;
+        }
+    }
+
+    # Mainsail server on port 4409
+    server {
+        listen 4409;
+        server_name _;
+        
+        root /usr/data/mainsail;
+        index index.html;
+        
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+        
+        location /websocket {
+            proxy_pass http://127.0.0.1:7125/websocket;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $http_host;
             proxy_read_timeout 86400;
+        }
+        
+        location ~ ^/(printer|api|access|machine|server)/ {
+            proxy_pass http://127.0.0.1:7125;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Scheme $scheme;
         }
     }
 }
@@ -283,21 +309,21 @@ EOF
 detect_web_services() {
   print_message "Detecting existing web services"
   
-  echo "Checking for processes using port 80..."
-  netstat -tulpn 2>/dev/null | grep ":80 "
+  echo "Checking for processes using ports 4408 and 4409..."
+  netstat -tulpn 2>/dev/null | grep -E ":4408|:4409"
   
   echo ""
-  echo "Checking for running web servers..."
-  ps aux | grep -E 'nginx|httpd|lighttpd' | grep -v grep
+  echo "Checking for running nginx processes..."
+  ps aux | grep nginx | grep -v grep
   
   echo ""
   echo "Existing Moonraker processes:"
   ps aux | grep moonraker | grep -v grep
 }
 
-# Restart Nginx on the alternative port
+# Restart Nginx with the correct configuration
 restart_nginx() {
-  print_message "Starting Nginx on alternative port"
+  print_message "Starting Nginx with correct ports"
   
   # Kill any existing Nginx processes managed by our installation
   if [ -f "/opt/var/run/nginx.pid" ]; then
@@ -306,21 +332,31 @@ restart_nginx() {
     sleep 2
   fi
   
+  # Check if ports 4408 and 4409 are already in use
+  if netstat -tulpn 2>/dev/null | grep -q ":4408 "; then
+    echo "Warning: Port 4408 is already in use. Fluidd may not be accessible."
+  fi
+  
+  if netstat -tulpn 2>/dev/null | grep -q ":4409 "; then
+    echo "Warning: Port 4409 is already in use. Mainsail may not be accessible."
+  fi
+  
   # Start Nginx
   echo "Starting Nginx..."
   /opt/sbin/nginx -c /opt/etc/nginx/nginx.conf
   
   if [ $? -eq 0 ]; then
-    echo "Nginx started successfully on port 8080."
+    echo "Nginx started successfully on ports 4408 and 4409."
   else
     echo "Failed to start Nginx. Please check the logs."
-    echo "You can try starting it manually with: /opt/sbin/nginx -c /opt/etc/nginx/nginx.conf"
+    echo "You can try stopping any existing services using these ports, then start Nginx manually:"
+    echo "/opt/sbin/nginx -c /opt/etc/nginx/nginx.conf"
   fi
 }
 
 # Main function
 main() {
-  print_message "Starting Creality K1/K1-Max Mainsail/Fluidd Installer (Alternative Port Version)"
+  print_message "Starting Creality K1/K1-Max Mainsail/Fluidd Installer (Correct Ports)"
   
   # Check Entware and install SSL-capable downloader
   check_entware
@@ -345,16 +381,16 @@ main() {
   # Final message
   print_message "Installation complete!"
   echo "You can now access:"
-  echo "- Fluidd at: http://$(ip route get 1 | awk '{print $7;exit}'):8080/fluidd"
-  echo "- Mainsail at: http://$(ip route get 1 | awk '{print $7;exit}'):8080/mainsail"
-  echo ""
-  echo "NOTE: We're using port 8080 to avoid conflicts with the existing web server."
+  echo "- Fluidd at: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
+  echo "- Mainsail at: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
   echo ""
   echo "If you encounter any issues:"
   echo "1. Check that Moonraker is running:"
   echo "   ps aux | grep moonraker"
   echo "2. If not, start it manually:"
   echo "   python3 /usr/data/moonraker/moonraker/moonraker.py -d /usr/data/printer_data"
+  echo "3. If Nginx failed to start, check for other services using the ports:"
+  echo "   netstat -tulpn | grep -E ':4408|:4409'"
   echo ""
   echo "Enjoy!"
 }
