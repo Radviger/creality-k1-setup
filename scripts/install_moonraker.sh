@@ -20,9 +20,10 @@ mkdir -p "$TMPDIR"
 # Export TMPDIR to use during pip installations
 export TMPDIR="$TMPDIR"
 
-# Check if bash is installed before trying to install it
-# First, make sure PATH includes Entware
+# Ensure PATH includes Entware
 export PATH=$PATH:/opt/bin:/opt/sbin
+
+# Check if bash is installed
 BASH_PATH=$(which bash)
 if [ -z "$BASH_PATH" ]; then
     echo "Bash is not installed. Installing bash..."
@@ -50,23 +51,52 @@ echo "Modifying install-moonraker.sh to work without sudo and apt-get..."
 sed -i 's/sudo //g' ./scripts/install-moonraker.sh
 sed -i '/apt-get/d' ./scripts/install-moonraker.sh
 
-# Ensure virtualenv is installed
-VIRTUALENV_PATH=$(which virtualenv)
-if [ -z "$VIRTUALENV_PATH" ]; then
+# Install virtualenv if not available
+echo "Checking for virtualenv..."
+if ! command -v virtualenv >/dev/null 2>&1; then
     echo "virtualenv is not installed. Installing virtualenv..."
-    pip3 install virtualenv || exit_on_error "Failed to install virtualenv"
+    pip3 install virtualenv || {
+        echo "Failed to install virtualenv with pip3, trying with opkg..."
+        /opt/bin/opkg update
+        /opt/bin/opkg install python3-virtualenv || exit_on_error "Failed to install virtualenv"
+    }
 fi
 
-# Create virtual environment using virtualenv.py directly
+# Verify virtualenv is installed
+if ! command -v virtualenv >/dev/null 2>&1; then
+    # If virtualenv is still not in PATH, try to find it
+    VIRTUALENV_PATH=$(find /usr -name virtualenv -type f 2>/dev/null | head -n 1)
+    if [ -z "$VIRTUALENV_PATH" ]; then
+        VIRTUALENV_PATH=$(find /opt -name virtualenv -type f 2>/dev/null | head -n 1)
+    fi
+    
+    if [ -z "$VIRTUALENV_PATH" ]; then
+        # If we still can't find it, try installing it again with pip
+        echo "Trying alternative virtualenv installation..."
+        python3 -m pip install virtualenv || exit_on_error "Failed to install virtualenv with pip"
+        VIRTUALENV_PATH="python3 -m virtualenv"
+    else
+        echo "Found virtualenv at $VIRTUALENV_PATH"
+    fi
+else
+    VIRTUALENV_PATH=$(which virtualenv)
+    echo "virtualenv found in PATH: $VIRTUALENV_PATH"
+fi
+
+# Create virtual environment
 echo "Creating virtual environment..."
-virtualenv -p /usr/bin/python3 $VENV_DIR || exit_on_error "Failed to create virtual environment"
+if [ "$VIRTUALENV_PATH" = "python3 -m virtualenv" ]; then
+    python3 -m virtualenv $VENV_DIR || exit_on_error "Failed to create virtual environment"
+else
+    $VIRTUALENV_PATH -p $(which python3) $VENV_DIR || exit_on_error "Failed to create virtual environment"
+fi
 
 # Activate virtual environment
 echo "Activating virtual environment..."
-. $VENV_DIR/bin/activate
+. $VENV_DIR/bin/activate || exit_on_error "Failed to activate virtual environment"
 
 # Upgrade pip within the virtual environment
-pip install --upgrade pip || exit_on_error "Failed to upgrade pip"
+pip install --upgrade pip || echo "Warning: Failed to upgrade pip, continuing anyway..."
 
 # Install Moonraker requirements
 echo "Installing Moonraker requirements..."
@@ -77,6 +107,7 @@ export LMDB_FORCE_SYSTEM=1
 
 # Run install-moonraker.sh with bash
 echo "Running install-moonraker.sh with bash..."
+cd $MOONRAKER_DIR
 bash $MOONRAKER_DIR/scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
 
 echo "Moonraker installation complete."
