@@ -8,44 +8,89 @@ print_message() {
   echo ""
 }
 
-# Install Entware and wget-ssl to fix TLS issues
-fix_ssl_issues() {
-  print_message "Installing Entware to fix SSL/TLS issues"
+# Check if Entware is properly installed
+check_entware() {
+  print_message "Checking Entware installation"
   
-  # Check if Entware is already installed
   if [ ! -d "/opt" ] || [ ! -f "/opt/bin/opkg" ]; then
-    echo "Entware not found. Installing Entware..."
+    echo "Entware not found or not properly installed."
+    echo "Installing Entware..."
     
-    # Create a temporary directory for Entware installation
-    mkdir -p /tmp/entware
-    cd /tmp/entware
+    # Navigate to /tmp directory
+    cd /tmp
     
-    # Download and run the Entware installer
+    # Remove any existing generic.sh file
+    rm -f generic.sh
+    
+    # Download the Entware installer without SSL verification
+    echo "Downloading Entware installer..."
     wget http://bin.entware.net/mipselsf-k3.4/installer/generic.sh
+    
+    if [ $? -ne 0 ]; then
+      echo "Failed to download Entware installer. Aborting."
+      exit 1
+    fi
+    
+    # Run the Entware installer
+    echo "Running Entware installer..."
     sh generic.sh
     
-    # Clean up
-    cd /
-    rm -rf /tmp/entware
+    if [ $? -ne 0 ]; then
+      echo "Failed to install Entware. Aborting."
+      exit 1
+    fi
     
-    print_message "Entware installed. Now installing wget-ssl..."
-    
-    # Need to reload the shell to get Entware in the path
-    export PATH=$PATH:/opt/bin:/opt/sbin
-    
-    # Install wget-ssl
-    /opt/bin/opkg update
-    /opt/bin/opkg install wget-ssl
-    
-    print_message "SSL support installed!"
+    echo "Entware installed successfully."
   else
     echo "Entware is already installed."
-    
-    # Ensure wget-ssl is installed
-    export PATH=$PATH:/opt/bin:/opt/sbin
-    /opt/bin/opkg update
-    /opt/bin/opkg install wget-ssl
   fi
+  
+  # Add Entware to PATH
+  export PATH=$PATH:/opt/bin:/opt/sbin
+  
+  # Update and install wget-ssl
+  echo "Updating package lists..."
+  /opt/bin/opkg update
+  
+  echo "Installing wget-ssl..."
+  /opt/bin/opkg install wget-ssl
+  
+  if [ $? -ne 0 ]; then
+    echo "Failed to install wget-ssl. Will try to use curl instead."
+    /opt/bin/opkg install curl
+  fi
+  
+  # Verify wget-ssl or curl is installed
+  if [ ! -f "/opt/bin/wget-ssl" ] && [ ! -f "/opt/bin/curl" ]; then
+    echo "Neither wget-ssl nor curl could be installed. Cannot continue."
+    exit 1
+  fi
+  
+  echo "SSL-capable downloader installed successfully."
+}
+
+# Function to safely download a file
+download_file() {
+  url="$1"
+  output="$2"
+  
+  # Try wget-ssl first
+  if [ -f "/opt/bin/wget-ssl" ]; then
+    echo "Downloading with wget-ssl: $url"
+    /opt/bin/wget-ssl --no-check-certificate -O "$output" "$url"
+    return $?
+  fi
+  
+  # Try curl as backup
+  if [ -f "/opt/bin/curl" ]; then
+    echo "Downloading with curl: $url"
+    /opt/bin/curl --insecure -L -o "$output" "$url"
+    return $?
+  fi
+  
+  # If we get here, neither tool worked
+  echo "No download tool available. Cannot download $url"
+  return 1
 }
 
 # Create necessary directories
@@ -66,8 +111,8 @@ install_fluidd() {
   # Remove any existing installation
   rm -rf /usr/data/fluidd/*
   
-  # Download using wget-ssl which has proper SSL support
-  /opt/bin/wget-ssl --no-check-certificate -O fluidd.zip https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip
+  # Download Fluidd
+  download_file "https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip" "fluidd.zip"
   
   if [ $? -eq 0 ]; then
     echo "Successfully downloaded Fluidd."
@@ -75,7 +120,10 @@ install_fluidd() {
     rm fluidd.zip
     echo "Fluidd installed successfully!"
   else
-    echo "Failed to download Fluidd. Please check your internet connection."
+    echo "Failed to download Fluidd."
+    # Create placeholder file
+    mkdir -p /usr/data/fluidd
+    echo "<html><body><h1>Fluidd Download Failed</h1><p>Please download and install manually.</p></body></html>" > /usr/data/fluidd/index.html
     return 1
   fi
 }
@@ -88,8 +136,8 @@ install_mainsail() {
   # Remove any existing installation
   rm -rf /usr/data/mainsail/*
   
-  # Download using wget-ssl which has proper SSL support
-  /opt/bin/wget-ssl --no-check-certificate -O mainsail.zip https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip
+  # Download Mainsail
+  download_file "https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip" "mainsail.zip"
   
   if [ $? -eq 0 ]; then
     echo "Successfully downloaded Mainsail."
@@ -97,23 +145,26 @@ install_mainsail() {
     rm mainsail.zip
     echo "Mainsail installed successfully!"
   else
-    echo "Failed to download Mainsail. Please check your internet connection."
+    echo "Failed to download Mainsail."
+    # Create placeholder file
+    mkdir -p /usr/data/mainsail
+    echo "<html><body><h1>Mainsail Download Failed</h1><p>Please download and install manually.</p></body></html>" > /usr/data/mainsail/index.html
     return 1
   fi
 }
 
-# Configure Nginx
+# Configure Nginx on alternative ports
 configure_nginx() {
-  print_message "Configuring Nginx"
+  print_message "Configuring Nginx on alternative ports"
   
   # Ensure Nginx is installed
   export PATH=$PATH:/opt/bin:/opt/sbin
   /opt/bin/opkg install nginx
   
-  # Create proper Nginx configuration
+  # Create proper Nginx configuration using alternative ports
   mkdir -p /opt/etc/nginx
   
-  # Create a proper nginx.conf file
+  # Create a proper nginx.conf file with alternative ports (8080)
   cat > /opt/etc/nginx/nginx.conf << 'EOF'
 worker_processes 1;
 pid /opt/var/run/nginx.pid;
@@ -129,8 +180,9 @@ http {
     keepalive_timeout 65;
     gzip on;
 
+    # Main server on port 8080 to avoid conflicts
     server {
-        listen 80;
+        listen 8080;
         server_name _;
         
         # Fluidd
@@ -227,25 +279,51 @@ EOF
   fi
 }
 
-# Restart services
-restart_services() {
-  print_message "Restarting services"
+# Find and detect existing web services
+detect_web_services() {
+  print_message "Detecting existing web services"
   
-  # Kill any existing Nginx processes
-  killall -q nginx || true
+  echo "Checking for processes using port 80..."
+  netstat -tulpn 2>/dev/null | grep ":80 "
+  
+  echo ""
+  echo "Checking for running web servers..."
+  ps aux | grep -E 'nginx|httpd|lighttpd' | grep -v grep
+  
+  echo ""
+  echo "Existing Moonraker processes:"
+  ps aux | grep moonraker | grep -v grep
+}
+
+# Restart Nginx on the alternative port
+restart_nginx() {
+  print_message "Starting Nginx on alternative port"
+  
+  # Kill any existing Nginx processes managed by our installation
+  if [ -f "/opt/var/run/nginx.pid" ]; then
+    echo "Stopping existing Nginx instance..."
+    kill -TERM $(cat /opt/var/run/nginx.pid) 2>/dev/null
+    sleep 2
+  fi
   
   # Start Nginx
-  /opt/sbin/nginx
+  echo "Starting Nginx..."
+  /opt/sbin/nginx -c /opt/etc/nginx/nginx.conf
   
-  echo "Services restarted. If Moonraker is not running, you may need to start it manually."
+  if [ $? -eq 0 ]; then
+    echo "Nginx started successfully on port 8080."
+  else
+    echo "Failed to start Nginx. Please check the logs."
+    echo "You can try starting it manually with: /opt/sbin/nginx -c /opt/etc/nginx/nginx.conf"
+  fi
 }
 
 # Main function
 main() {
-  print_message "Starting Creality K1/K1-Max Mainsail/Fluidd Installer"
+  print_message "Starting Creality K1/K1-Max Mainsail/Fluidd Installer (Alternative Port Version)"
   
-  # Fix SSL issues first
-  fix_ssl_issues
+  # Check Entware and install SSL-capable downloader
+  check_entware
   
   # Create directories
   create_directories
@@ -254,18 +332,23 @@ main() {
   install_fluidd
   install_mainsail
   
+  # Detect existing web services
+  detect_web_services
+  
   # Configure services
   configure_nginx
   configure_moonraker
   
-  # Restart services
-  restart_services
+  # Restart Nginx
+  restart_nginx
   
   # Final message
   print_message "Installation complete!"
   echo "You can now access:"
-  echo "- Fluidd at: http://$(ip route get 1 | awk '{print $7;exit}')/fluidd"
-  echo "- Mainsail at: http://$(ip route get 1 | awk '{print $7;exit}')/mainsail"
+  echo "- Fluidd at: http://$(ip route get 1 | awk '{print $7;exit}'):8080/fluidd"
+  echo "- Mainsail at: http://$(ip route get 1 | awk '{print $7;exit}'):8080/mainsail"
+  echo ""
+  echo "NOTE: We're using port 8080 to avoid conflicts with the existing web server."
   echo ""
   echo "If you encounter any issues:"
   echo "1. Check that Moonraker is running:"
