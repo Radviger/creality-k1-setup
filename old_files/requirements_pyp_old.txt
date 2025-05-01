@@ -19,3 +19,5 @@ libjpeg-dev
 packagekit
 wireless-tools
 curl
+
+

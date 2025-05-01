@@ -22,10 +22,13 @@ else
     echo "Internet connection verified."
 fi
 
+# Ensure PATH includes Entware binaries
+export PATH=$PATH:/opt/bin:/opt/sbin
+
 # Ensure necessary system packages are installed
 echo "Checking and installing required system packages..."
-opkg update
-opkg install sudo bash
+/opt/bin/opkg update
+/opt/bin/opkg install sudo bash
 
 # Fix sudo permissions
 echo "Fixing sudo permissions..."
@@ -100,7 +103,7 @@ python_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.v
 required_python_version="3.6"
 if [ "$(printf '%s\n' "$required_python_version" "$python_version" | sort -V | head -n1)" != "$required_python_version" ]; then
     echo "Python version is less than $required_python_version. Upgrading Python..."
-    opkg install python3 || exit_on_error "Failed to upgrade Python"
+    /opt/bin/opkg install python3 || exit_on_error "Failed to upgrade Python"
 else
     echo "Python version is $python_version, which is compatible."
 fi
@@ -113,7 +116,7 @@ is_python_package_installed() {
 
 # Function to check if an IPK package is installed
 is_ipk_package_installed() {
-    opkg list-installed | grep -q "$1"
+    /opt/bin/opkg list-installed | grep -q "$1"
     return $?
 }
 
@@ -151,8 +154,8 @@ install_whl_files \
 # Ensure necessary system libraries are installed
 install_system_libraries() {
     echo "Installing necessary system libraries..."
-    opkg update
-    opkg install libsodium libjpeg zlib || exit_on_error "Failed to install necessary system libraries"
+    /opt/bin/opkg update
+    /opt/bin/opkg install libsodium libjpeg zlib || exit_on_error "Failed to install necessary system libraries"
 }
 
 install_system_libraries
@@ -189,7 +192,7 @@ install_from_source_or_alternative() {
             echo "Skipping wireless-tools as there's no direct equivalent"
             ;;
         curl)
-            opkg install curl || exit_on_error "Failed to install curl"
+            /opt/bin/opkg install curl || exit_on_error "Failed to install curl"
             ;;
         *)
             warn "No alternative installation method for $1"
@@ -249,9 +252,9 @@ fi
 # Ensure moonrakeruser has ownership of the /usr/data directory
 chown -R moonrakeruser:moonrakeruser /usr/data
 
-# Switch to moonrakeruser and run the install_moonraker.sh script
-echo "Running install_moonraker.sh as moonrakeruser..."
-su - moonrakeruser -c "sh $SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to run install_moonraker.sh as moonrakeruser"
+# Run the install_moonraker.sh script directly (not as moonrakeruser)
+echo "Running install_moonraker.sh..."
+sh "$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to run install_moonraker.sh"
 
 # Check if Nginx is installed
 if ! which nginx >/dev/null; then

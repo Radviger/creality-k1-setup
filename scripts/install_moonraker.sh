@@ -8,13 +8,6 @@ exit_on_error() {
     exit 1
 }
 
-# Ensure bash is installed
-BASH_PATH=$(which bash)
-if [ -z "$BASH_PATH" ]; then
-    echo "Bash is not installed. Installing bash..."
-    opkg install bash || exit_on_error "Failed to install bash"
-fi
-
 # Set the working directory
 WORKING_DIR="/usr/data"
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
@@ -26,6 +19,15 @@ mkdir -p "$TMPDIR"
 
 # Export TMPDIR to use during pip installations
 export TMPDIR="$TMPDIR"
+
+# Check if bash is installed before trying to install it
+# First, make sure PATH includes Entware
+export PATH=$PATH:/opt/bin:/opt/sbin
+BASH_PATH=$(which bash)
+if [ -z "$BASH_PATH" ]; then
+    echo "Bash is not installed. Installing bash..."
+    /opt/bin/opkg install bash || exit_on_error "Failed to install bash"
+fi
 
 # Install Moonraker
 echo "Installing Moonraker..."
@@ -55,30 +57,13 @@ if [ -z "$VIRTUALENV_PATH" ]; then
     pip3 install virtualenv || exit_on_error "Failed to install virtualenv"
 fi
 
-# Switch to moonrakeruser before creating the virtual environment and installing packages
-su - moonrakeruser <<'EOF'
-# Set the working directory for moonrakeruser
-WORKING_DIR="/usr/data"
-MOONRAKER_DIR="$WORKING_DIR/moonraker"
-VENV_DIR="$WORKING_DIR/moonraker-env"
-TMPDIR="$WORKING_DIR/tmp"
-
-# Ensure TMPDIR exists
-mkdir -p "$TMPDIR"
-
-# Export TMPDIR to use during pip installations
-export TMPDIR="$TMPDIR"
-
-# Ensure the PATH includes the directory for opkg
-export PATH=$PATH:/opt/bin:/opt/sbin
-
 # Create virtual environment using virtualenv.py directly
 echo "Creating virtual environment..."
 virtualenv -p /usr/bin/python3 $VENV_DIR || exit_on_error "Failed to create virtual environment"
 
 # Activate virtual environment
 echo "Activating virtual environment..."
-source $VENV_DIR/bin/activate
+. $VENV_DIR/bin/activate
 
 # Upgrade pip within the virtual environment
 pip install --upgrade pip || exit_on_error "Failed to upgrade pip"
@@ -90,9 +75,8 @@ pip install --trusted-host pypi.python.org --trusted-host pypi.org --trusted-hos
 # Set environment variable to use system lmdb
 export LMDB_FORCE_SYSTEM=1
 
-# Run install-moonraker.sh with bash as moonrakeruser
-echo "Running install-moonraker.sh with bash as moonrakeruser..."
-bash $MOONRAKER_DIR/scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script as moonrakeruser"
-EOF
+# Run install-moonraker.sh with bash
+echo "Running install-moonraker.sh with bash..."
+bash $MOONRAKER_DIR/scripts/install-moonraker.sh || exit_on_error "Failed to run Moonraker install script"
 
 echo "Moonraker installation complete."
