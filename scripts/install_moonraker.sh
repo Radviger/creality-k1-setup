@@ -189,63 +189,90 @@ EOF
     echo "Moonraker configuration created."
 }
 
-# Create Nginx configuration
+# Create Nginx configuration using the proper format for Creality K1
 create_nginx_config() {
     echo "Creating Nginx configuration..."
     
     mkdir -p /opt/etc/nginx
     
     cat > /opt/etc/nginx/nginx.conf << 'EOF'
-worker_processes 1;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    include mime.types;
-    default_type application/octet-stream;
-    sendfile on;
-    keepalive_timeout 65;
+# Main server for port 80 (existing setup)
+server {
+    listen 80;
+    server_name _;
     
-    server {
-        listen 4408;
-        root /usr/data/fluidd;
-        
-        location / {
-            try_files $uri $uri/ /index.html;
-        }
-        
-        location /websocket {
-            proxy_pass http://127.0.0.1:7125/websocket;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-        }
-        
-        location ~ ^/(printer|api|access|machine|server)/ {
-            proxy_pass http://127.0.0.1:7125;
-        }
+    location /fluidd {
+        alias /usr/data/fluidd;
+        try_files $uri $uri/ /index.html;
     }
     
-    server {
-        listen 4409;
-        root /usr/data/mainsail;
-        
-        location / {
-            try_files $uri $uri/ /index.html;
-        }
-        
-        location /websocket {
-            proxy_pass http://127.0.0.1:7125/websocket;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-        }
-        
-        location ~ ^/(printer|api|access|machine|server)/ {
-            proxy_pass http://127.0.0.1:7125;
-        }
+    location /mainsail {
+        alias /usr/data/mainsail;
+        try_files $uri $uri/ /index.html;
+    }
+    
+    location /moonraker {
+        proxy_pass http://localhost:7125;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+}
+
+# Dedicated server for Fluidd on port 4408
+server {
+    listen 4408;
+    server_name _;
+    
+    root /usr/data/fluidd;
+    
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    
+    location /websocket {
+        proxy_pass http://localhost:7125/websocket;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+    
+    location ~ ^/(printer|api|access|machine|server)/ {
+        proxy_pass http://localhost:7125;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+
+# Dedicated server for Mainsail on port 4409
+server {
+    listen 4409;
+    server_name _;
+    
+    root /usr/data/mainsail;
+    
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    
+    location /websocket {
+        proxy_pass http://localhost:7125/websocket;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+    
+    location ~ ^/(printer|api|access|machine|server)/ {
+        proxy_pass http://localhost:7125;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 }
 EOF
@@ -309,6 +336,17 @@ start_nginx() {
     
     # Kill any existing Nginx process
     killall nginx 2>/dev/null || true
+    
+    # Test Nginx configuration
+    echo "Testing Nginx configuration..."
+    if [ -f "/opt/sbin/nginx" ]; then
+        /opt/sbin/nginx -t -c /opt/etc/nginx/nginx.conf
+    elif [ -f "/opt/bin/nginx" ]; then
+        /opt/bin/nginx -t -c /opt/etc/nginx/nginx.conf
+    else
+        echo "Nginx executable not found."
+        return 1
+    fi
     
     # Start Nginx
     if [ -f "/opt/sbin/nginx" ]; then
@@ -433,6 +471,10 @@ main() {
     echo "Then access the interfaces at:"
     echo "  Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
     echo "  Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
+    echo ""
+    echo "You can also access via the main server:"
+    echo "  Fluidd: http://$(ip route get 1 | awk '{print $7;exit}')/fluidd"
+    echo "  Mainsail: http://$(ip route get 1 | awk '{print $7;exit}')/mainsail"
     echo ""
     echo "If you need to restart Moonraker, use:"
     echo "  /usr/data/start_moonraker.sh"
