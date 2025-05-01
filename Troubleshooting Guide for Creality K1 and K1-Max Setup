@@ -1,0 +1,206 @@
+# Troubleshooting Guide for Creality K1 and K1-Max Setup
+
+This guide covers common issues you might encounter when setting up Mainsail and Fluidd on your Creality K1 or K1-Max printer, along with their solutions.
+
+## Common Installation Issues
+
+### 1. Sudo Permissions Issues
+
+**Symptoms:**
+```
+sudo: error in /opt/etc/sudo.conf, line 0 while loading plugin "sudoers_policy"
+sudo: /opt/lib/sudo/sudoers.so must be owned by uid 0
+sudo: fatal error, unable to load plugins
+```
+
+**Solution:**
+The sudoers.so file has incorrect permissions. Fix it with:
+```sh
+chown root:root /opt/bin/sudo
+chmod 4755 /opt/bin/sudo
+chown root:root /opt/lib/sudo/sudoers.so
+chmod 644 /opt/lib/sudo/sudoers.so
+```
+
+Also, create a proper sudoers file:
+```sh
+mkdir -p /opt/etc
+cat > /opt/etc/sudoers << 'EOF'
+# /etc/sudoers
+Defaults        env_reset
+
+# User privilege specification
+root    ALL=(ALL) ALL
+moonrakeruser ALL=(ALL) NOPASSWD: ALL
+
+# Allow members of group sudo to execute any command
+%sudo   ALL=(ALL) ALL
+EOF
+
+chown root:root /opt/etc/sudoers
+chmod 440 /opt/etc/sudoers
+```
+
+### 2. Missing Scripts Directory or Files
+
+**Symptoms:**
+```
+chmod: /usr/data/creality-k1-setup/scripts/install_moonraker.sh: No such file or directory
+chmod: /usr/data/creality-k1-setup/scripts/setup_nginx.sh: No such file or directory
+```
+
+**Solution:**
+Ensure the scripts directory and files exist:
+```sh
+# Check if directory exists
+ls -la /usr/data/creality-k1-setup/
+
+# Create if needed
+mkdir -p /usr/data/creality-k1-setup/scripts
+
+# Copy scripts from repository or recreate them
+# Make them executable
+chmod +x /usr/data/creality-k1-setup/scripts/*.sh
+```
+
+### 3. Wget File Exists Error
+
+**Symptoms:**
+```
+wget: can't open 'generic.sh': File exists
+```
+
+**Solution:**
+Remove the existing file first:
+```sh
+rm -f generic.sh
+wget http://bin.entware.net/mipselsf-k3.4/installer/generic.sh
+```
+
+### 4. Permission Denied Errors
+
+**Symptoms:**
+```
+permission denied: /usr/data/creality-k1-setup/install.sh
+```
+
+**Solution:**
+Make the script executable:
+```sh
+chmod +x /usr/data/creality-k1-setup/install.sh
+```
+
+### 5. Missing Python Packages
+
+**Symptoms:**
+```
+No module named 'virtualenv'
+```
+
+**Solution:**
+Install the required Python package:
+```sh
+pip3 install virtualenv
+```
+
+### 6. Moonraker Installation Fails
+
+**Symptoms:**
+Errors during the moonraker installation process.
+
+**Solution:**
+1. Check if git is installed:
+```sh
+opkg install git
+```
+
+2. Ensure the moonrakeruser has proper permissions:
+```sh
+chown -R moonrakeruser:moonrakeruser /usr/data
+```
+
+3. Try installing Moonraker manually:
+```sh
+cd /usr/data
+git clone https://github.com/Arksine/moonraker.git
+```
+
+### 7. Nginx Configuration Issues
+
+**Symptoms:**
+Web interface not accessible or 404 errors.
+
+**Solution:**
+1. Check if Nginx is installed and running:
+```sh
+opkg install nginx
+/opt/etc/init.d/S80nginx restart
+```
+
+2. Verify the Nginx configuration:
+```sh
+cat > /opt/etc/nginx/nginx.conf << 'EOF'
+server {
+    listen 80;
+    server_name _;
+
+    location /fluidd {
+        alias /usr/data/fluidd;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /mainsail {
+        alias /usr/data/mainsail;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /moonraker {
+        proxy_pass http://localhost:7125;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+}
+EOF
+```
+
+### 8. Moonraker Service Not Starting
+
+**Symptoms:**
+Moonraker service fails to start or is not running.
+
+**Solution:**
+Check the Moonraker service status and logs:
+```sh
+systemctl status moonraker
+# or
+cat /var/log/moonraker.log
+```
+
+Fix permissions if needed:
+```sh
+chmod +x /etc/init.d/moonraker
+/etc/init.d/moonraker restart
+```
+
+## Verification Steps
+
+After installation, verify that everything is working correctly:
+
+1. **Check that Moonraker is running:**
+```sh
+ps aux | grep moonraker
+```
+
+2. **Check that Nginx is running:**
+```sh
+ps aux | grep nginx
+```
+
+3. **Verify web interface access:**
+   Open a browser and navigate to:
+   - Mainsail: `http://<printer_ip>/mainsail`
+   - Fluidd: `http://<printer_ip>/fluidd`
+
+If you encounter any other issues not covered in this guide, please open an issue on the GitHub repository with a detailed description of the problem and any error messages you're seeing.
