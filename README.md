@@ -38,6 +38,7 @@ The Creality K1 and K1-Max 3D printers run on a restricted environment. This gui
      ```sh
      wget http://bin.entware.net/mipselsf-k3.4/installer/generic.sh
      ```
+     Running this next install script takes some time, the script is not stopping, just using time on checking, before installing.
       ```sh
      sh generic.sh
      ```
