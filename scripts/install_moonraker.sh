@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# Updated script for installing Moonraker on Creality K1/K1-Max
-# This script addresses disk space issues and disables problematic components
+# Revised script for installing Moonraker on Creality K1/K1-Max
+# This script is modified to match the approach used in Creality Helper Script
 
 # Function to print and exit on error
 exit_on_error() {
@@ -10,13 +10,14 @@ exit_on_error() {
 }
 
 # Set the working directory and temp directory
-# Use /usr/data for temporary files to avoid filling the root filesystem
 WORKING_DIR="/usr/data"
 MOONRAKER_DIR="$WORKING_DIR/moonraker"
 VENV_DIR="$WORKING_DIR/moonraker-env"
 TMPDIR="$WORKING_DIR/tmp"
 CONFIG_DIR="$WORKING_DIR/printer_data/config"
 LOGS_DIR="$WORKING_DIR/printer_data/logs"
+FLUIDD_FOLDER="$WORKING_DIR/fluidd"
+MAINSAIL_FOLDER="$WORKING_DIR/mainsail"
 
 # Ensure directories exist
 mkdir -p "$TMPDIR"
@@ -104,36 +105,12 @@ setup_venv() {
         mkdir -p "$VENV_DIR/bin"
         mkdir -p "$VENV_DIR/lib/python3.8/site-packages"
         
-        # Create activate script
-        cat > "$VENV_DIR/bin/activate" << 'EOF'
-# This file must be used with "source bin/activate" *from bash*
-# You cannot run it directly
-deactivate () {
-    unset -f pydoc >/dev/null 2>&1
-    unset -f deactivate
-    unset VIRTUAL_ENV
-    if [ ! "${1:-}" = "nondestructive" ] ; then
-    # Self destruct!
-        unset -f deactivate
-    fi
-}
-VIRTUAL_ENV="$VENV_DIR"
-export VIRTUAL_ENV
-_OLD_VIRTUAL_PATH="$PATH"
-PATH="$VIRTUAL_ENV/bin:$PATH"
-export PATH
-EOF
-        
         # Create symlinks to system Python
         ln -sf $(which python3) "$VENV_DIR/bin/python"
         ln -sf $(which python3) "$VENV_DIR/bin/python3"
         ln -sf $(which pip3) "$VENV_DIR/bin/pip"
         ln -sf $(which pip3) "$VENV_DIR/bin/pip3"
     }
-    
-    # Activate virtual environment
-    echo "Activating virtual environment..."
-    . "$VENV_DIR/bin/activate" || exit_on_error "Failed to activate virtual environment"
 }
 
 # Create Moonraker configuration
@@ -189,14 +166,13 @@ EOF
     echo "Moonraker configuration created."
 }
 
-# Create Nginx configuration using the proper format for Creality K1
+# Create Nginx configuration - using the same format as the existing conf file
 create_nginx_config() {
     echo "Creating Nginx configuration..."
     
     mkdir -p /opt/etc/nginx
     
     cat > /opt/etc/nginx/nginx.conf << 'EOF'
-# Main server for port 80 (existing setup)
 server {
     listen 80;
     server_name _;
@@ -220,7 +196,6 @@ server {
     }
 }
 
-# Dedicated server for Fluidd on port 4408
 server {
     listen 4408;
     server_name _;
@@ -248,7 +223,6 @@ server {
     }
 }
 
-# Dedicated server for Mainsail on port 4409
 server {
     listen 4409;
     server_name _;
@@ -330,29 +304,20 @@ start_moonraker() {
     fi
 }
 
-# Start Nginx
-start_nginx() {
-    echo "Starting Nginx..."
+# Restart Nginx function (based on helper script approach)
+restart_nginx() {
+    echo "Restarting Nginx..."
     
     # Kill any existing Nginx process
     killall nginx 2>/dev/null || true
     
-    # Test Nginx configuration
-    echo "Testing Nginx configuration..."
-    if [ -f "/opt/sbin/nginx" ]; then
-        /opt/sbin/nginx -t -c /opt/etc/nginx/nginx.conf
-    elif [ -f "/opt/bin/nginx" ]; then
-        /opt/bin/nginx -t -c /opt/etc/nginx/nginx.conf
-    else
-        echo "Nginx executable not found."
-        return 1
-    fi
-    
     # Start Nginx
     if [ -f "/opt/sbin/nginx" ]; then
-        /opt/sbin/nginx -c /opt/etc/nginx/nginx.conf
+        echo "Starting Nginx with /opt/sbin/nginx..."
+        /opt/sbin/nginx
     elif [ -f "/opt/bin/nginx" ]; then
-        /opt/bin/nginx -c /opt/etc/nginx/nginx.conf
+        echo "Starting Nginx with /opt/bin/nginx..."
+        /opt/bin/nginx
     else
         echo "Nginx executable not found."
         return 1
@@ -360,9 +325,9 @@ start_nginx() {
     
     # Check if it started
     if pgrep nginx > /dev/null; then
-        echo "Nginx started successfully!"
+        echo "Nginx restarted successfully!"
     else
-        echo "Nginx failed to start."
+        echo "Failed to restart Nginx."
         return 1
     fi
 }
@@ -370,12 +335,12 @@ start_nginx() {
 # Create directories for UIs
 create_ui_dirs() {
     echo "Creating UI directories..."
-    mkdir -p /usr/data/fluidd
-    mkdir -p /usr/data/mainsail
+    mkdir -p $FLUIDD_FOLDER
+    mkdir -p $MAINSAIL_FOLDER
     
     # Create minimal placeholder files
-    echo '<html><body><h1>Fluidd Placeholder</h1><p>UI not yet installed</p></body></html>' > /usr/data/fluidd/index.html
-    echo '<html><body><h1>Mainsail Placeholder</h1><p>UI not yet installed</p></body></html>' > /usr/data/mainsail/index.html
+    echo '<html><body><h1>Fluidd Placeholder</h1><p>UI not yet installed</p></body></html>' > $FLUIDD_FOLDER/index.html
+    echo '<html><body><h1>Mainsail Placeholder</h1><p>UI not yet installed</p></body></html>' > $MAINSAIL_FOLDER/index.html
 }
 
 # Create download script for UIs
@@ -436,6 +401,15 @@ case "$choice" in
     *) echo "Invalid choice." ;;
 esac
 
+# Restart Nginx to apply changes
+echo "Restarting Nginx..."
+killall nginx 2>/dev/null || true
+if [ -f "/opt/sbin/nginx" ]; then
+    /opt/sbin/nginx
+elif [ -f "/opt/bin/nginx" ]; then
+    /opt/bin/nginx
+fi
+
 echo "Done!"
 EOF
 
@@ -453,12 +427,12 @@ main() {
     setup_venv
     install_minimal_dependencies
     create_moonraker_config
+    create_ui_dirs
     create_nginx_config
     create_start_script
-    create_ui_dirs
     create_download_script
     start_moonraker
-    start_nginx
+    restart_nginx
     
     # Print completion message
     echo "==========================================="
