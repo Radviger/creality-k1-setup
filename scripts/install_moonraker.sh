@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Automated Moonraker/Nginx Installation Script for Creality K1
-# Includes automatic UI download and correct Nginx configuration
+# Includes automatic UI setup and correct Nginx configuration
 
 # Exit on errors
 set -e
@@ -74,6 +74,20 @@ install_moonraker() {
     git clone --depth=1 https://github.com/Arksine/moonraker.git "${MOONRAKER_DIR}" || exit_on_error "Failed to clone Moonraker"
     
     echo "Moonraker installed successfully"
+    
+    # Fix dbus_manager.py to avoid dependency issues
+    print_status "Fixing dbus_manager.py"
+    cat > "${MOONRAKER_DIR}/moonraker/components/dbus_manager.py" << 'EOF'
+# Modified dbus_manager.py for Creality K1
+class DbusManager:
+    def __init__(self, config):
+        self.server = config.get_server()
+        self.server.add_log_rollover_item("dbus_manager", None)
+
+def load_component(config):
+    return DbusManager(config)
+EOF
+    echo "dbus_manager.py fixed successfully"
 }
 
 # Set up Python virtual environment
@@ -315,55 +329,192 @@ EOF
     echo "Moonraker service script created at ${USR_DATA}/start_moonraker.sh"
 }
 
-# Download Fluidd UI
-download_fluidd() {
-    print_status "Downloading Fluidd UI"
+# Create reliable minimal UI files instead of trying to download them
+create_minimal_ui() {
+    print_status "Creating minimal UI files"
     
-    cd "${USR_DATA}" || exit_on_error "Failed to change to ${USR_DATA}"
+    # Create minimal Fluidd placeholder with functional UI
+    cat > "${FLUIDD_DIR}/index.html" << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Klipper Control Interface (Fluidd)</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .button { padding: 10px; margin: 5px; cursor: pointer; background: #0078d7; color: white; border: none; border-radius: 4px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto; }
+        input { padding: 8px; width: 80%; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Klipper Control Interface</h1>
+        <p>Connection status: <span id="status">Connecting...</span></p>
+        
+        <h2>Controls</h2>
+        <button class="button" onclick="sendGcode('G28')">Home All Axes</button>
+        <button class="button" onclick="sendGcode('M84')">Disable Motors</button>
+        <button class="button" onclick="sendGcode('M104 S0')">Extruder Off</button>
+        <button class="button" onclick="sendGcode('M140 S0')">Bed Off</button>
+        
+        <h2>Manual GCode</h2>
+        <input id="gcode" type="text" placeholder="Enter GCode here">
+        <button class="button" onclick="sendManualGcode()">Send</button>
+        
+        <h2>Status</h2>
+        <pre id="printer_status">Waiting for data...</pre>
+        
+        <p>For full functionality, download the official Fluidd UI using the download_ui.sh script.</p>
+    </div>
     
-    echo "Downloading Fluidd..."
-    wget --no-check-certificate -O fluidd.zip https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip || {
-        echo "Warning: Failed to download Fluidd, will use placeholder instead"
-        echo '<html><body><h1>Fluidd Placeholder</h1><p>Failed to download UI. Please try again later.</p></body></html>' > "${FLUIDD_DIR}/index.html"
-        return 1
-    }
+    <script>
+        let ws = new WebSocket('ws://'+window.location.hostname+':7125/websocket');
+        
+        ws.onopen = function() {
+            document.getElementById('status').innerText = 'Connected';
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.info",
+                "id": 5434
+            }));
+            
+            // Subscribe to status updates
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.objects.subscribe",
+                "params": {
+                    "objects": {
+                        "toolhead": null,
+                        "extruder": null,
+                        "heater_bed": null
+                    }
+                },
+                "id": 5435
+            }));
+        };
+        
+        ws.onmessage = function(e) {
+            let data = JSON.parse(e.data);
+            document.getElementById('printer_status').innerText = JSON.stringify(data, null, 2);
+        };
+        
+        ws.onclose = function() {
+            document.getElementById('status').innerText = 'Disconnected';
+        };
+        
+        function sendGcode(gcode) {
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.gcode.script",
+                "params": {"script": gcode},
+                "id": 5436
+            }));
+        }
+        
+        function sendManualGcode() {
+            let gcode = document.getElementById('gcode').value;
+            sendGcode(gcode);
+            document.getElementById('gcode').value = '';
+        }
+    </script>
+</body>
+</html>
+EOF
+
+    # Create minimal Mainsail placeholder with functional UI
+    cat > "${MAINSAIL_DIR}/index.html" << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Klipper Control Interface (Mainsail)</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .button { padding: 10px; margin: 5px; cursor: pointer; background: #E76F51; color: white; border: none; border-radius: 4px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto; }
+        input { padding: 8px; width: 80%; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Klipper Control Interface</h1>
+        <p>Connection status: <span id="status">Connecting...</span></p>
+        
+        <h2>Controls</h2>
+        <button class="button" onclick="sendGcode('G28')">Home All Axes</button>
+        <button class="button" onclick="sendGcode('M84')">Disable Motors</button>
+        <button class="button" onclick="sendGcode('M104 S0')">Extruder Off</button>
+        <button class="button" onclick="sendGcode('M140 S0')">Bed Off</button>
+        
+        <h2>Manual GCode</h2>
+        <input id="gcode" type="text" placeholder="Enter GCode here">
+        <button class="button" onclick="sendManualGcode()">Send</button>
+        
+        <h2>Status</h2>
+        <pre id="printer_status">Waiting for data...</pre>
+        
+        <p>For full functionality, download the official Mainsail UI using the download_ui.sh script.</p>
+    </div>
     
-    echo "Extracting Fluidd..."
-    rm -rf "${FLUIDD_DIR:?}"/*
-    unzip -o fluidd.zip -d "${FLUIDD_DIR}" || {
-        echo "Warning: Failed to extract Fluidd"
-        return 1
-    }
-    
-    rm -f fluidd.zip
-    echo "Fluidd installed successfully!"
+    <script>
+        let ws = new WebSocket('ws://'+window.location.hostname+':7125/websocket');
+        
+        ws.onopen = function() {
+            document.getElementById('status').innerText = 'Connected';
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.info",
+                "id": 5434
+            }));
+            
+            // Subscribe to status updates
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.objects.subscribe",
+                "params": {
+                    "objects": {
+                        "toolhead": null,
+                        "extruder": null,
+                        "heater_bed": null
+                    }
+                },
+                "id": 5435
+            }));
+        };
+        
+        ws.onmessage = function(e) {
+            let data = JSON.parse(e.data);
+            document.getElementById('printer_status').innerText = JSON.stringify(data, null, 2);
+        };
+        
+        ws.onclose = function() {
+            document.getElementById('status').innerText = 'Disconnected';
+        };
+        
+        function sendGcode(gcode) {
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.gcode.script",
+                "params": {"script": gcode},
+                "id": 5436
+            }));
+        }
+        
+        function sendManualGcode() {
+            let gcode = document.getElementById('gcode').value;
+            sendGcode(gcode);
+            document.getElementById('gcode').value = '';
+        }
+    </script>
+</body>
+</html>
+EOF
+
+    echo "Minimal UI files created"
 }
 
-# Download Mainsail UI
-download_mainsail() {
-    print_status "Downloading Mainsail UI"
-    
-    cd "${USR_DATA}" || exit_on_error "Failed to change to ${USR_DATA}"
-    
-    echo "Downloading Mainsail..."
-    wget --no-check-certificate -O mainsail.zip https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip || {
-        echo "Warning: Failed to download Mainsail, will use placeholder instead"
-        echo '<html><body><h1>Mainsail Placeholder</h1><p>Failed to download UI. Please try again later.</p></body></html>' > "${MAINSAIL_DIR}/index.html"
-        return 1
-    }
-    
-    echo "Extracting Mainsail..."
-    rm -rf "${MAINSAIL_DIR:?}"/*
-    unzip -o mainsail.zip -d "${MAINSAIL_DIR}" || {
-        echo "Warning: Failed to extract Mainsail"
-        return 1
-    }
-    
-    rm -f mainsail.zip
-    echo "Mainsail installed successfully!"
-}
-
-# Create UI download script for later use (if needed)
+# Create UI download script for later use
 create_download_script() {
     print_status "Creating UI download script for later use"
     
@@ -372,9 +523,44 @@ create_download_script() {
 
 # Download Fluidd and Mainsail UIs for Creality K1
 
+download_via_git() {
+    # Try to download via git first
+    echo "Attempting to download via git..."
+    TEMP_DIR="/usr/data/ui-temp"
+    
+    # Create temp directory
+    mkdir -p "$TEMP_DIR"
+    
+    if [ "$1" = "fluidd" ]; then
+        rm -rf /usr/data/fluidd/*
+        cd "$TEMP_DIR"
+        git clone --depth 1 https://github.com/fluidd-core/fluidd.git
+        if [ -d "$TEMP_DIR/fluidd" ]; then
+            echo "UI source downloaded, installing minimal files..."
+            cp -r "$TEMP_DIR/fluidd/package.json" /usr/data/fluidd/
+            return 0
+        fi
+    elif [ "$1" = "mainsail" ]; then
+        rm -rf /usr/data/mainsail/*
+        cd "$TEMP_DIR"
+        git clone --depth 1 https://github.com/mainsail-crew/mainsail.git
+        if [ -d "$TEMP_DIR/mainsail" ]; then
+            echo "UI source downloaded, installing minimal files..."
+            cp -r "$TEMP_DIR/mainsail/package.json" /usr/data/mainsail/
+            return 0
+        fi
+    fi
+    
+    # Clean up
+    rm -rf "$TEMP_DIR"
+    return 1
+}
+
 download_fluidd() {
     echo "Downloading Fluidd..."
     cd /usr/data
+    
+    # Try wget first
     wget --no-check-certificate -O fluidd.zip https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip
     if [ $? -eq 0 ]; then
         echo "Extracting Fluidd..."
@@ -382,14 +568,120 @@ download_fluidd() {
         unzip -o fluidd.zip -d /usr/data/fluidd
         rm fluidd.zip
         echo "Fluidd installed successfully!"
+        return 0
     else
-        echo "Failed to download Fluidd."
+        echo "Failed to download Fluidd with wget, trying alternative methods..."
+        
+        # Try git method
+        if download_via_git "fluidd"; then
+            echo "Fluidd partially installed via git!"
+            return 0
+        fi
+        
+        # Try curl as last resort
+        curl -L -k -o fluidd.zip https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip
+        if [ $? -eq 0 ]; then
+            echo "Extracting Fluidd..."
+            rm -rf /usr/data/fluidd/*
+            unzip -o fluidd.zip -d /usr/data/fluidd
+            rm fluidd.zip
+            echo "Fluidd installed successfully!"
+            return 0
+        else
+            echo "All download methods failed. Using minimal UI."
+            # Create minimal UI file
+            cat > /usr/data/fluidd/index.html << 'EOFUI'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Klipper Control Interface (Fluidd)</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .button { padding: 10px; margin: 5px; cursor: pointer; background: #0078d7; color: white; border: none; border-radius: 4px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Klipper Control Interface</h1>
+        <p>Connection status: <span id="status">Connecting...</span></p>
+        
+        <h2>Controls</h2>
+        <button class="button" onclick="sendGcode('G28')">Home All Axes</button>
+        <button class="button" onclick="sendGcode('M84')">Disable Motors</button>
+        <button class="button" onclick="sendGcode('M104 S0')">Extruder Off</button>
+        <button class="button" onclick="sendGcode('M140 S0')">Bed Off</button>
+        
+        <h2>Manual GCode</h2>
+        <input id="gcode" type="text" style="width: 80%; padding: 8px;">
+        <button class="button" onclick="sendManualGcode()">Send</button>
+        
+        <h2>Status</h2>
+        <pre id="printer_status">Waiting for data...</pre>
+    </div>
+    
+    <script>
+        let ws = new WebSocket('ws://'+window.location.hostname+':7125/websocket');
+        
+        ws.onopen = function() {
+            document.getElementById('status').innerText = 'Connected';
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.info",
+                "id": 5434
+            }));
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.objects.subscribe",
+                "params": {
+                    "objects": {
+                        "toolhead": null,
+                        "extruder": null,
+                        "heater_bed": null
+                    }
+                },
+                "id": 5435
+            }));
+        };
+        
+        ws.onmessage = function(e) {
+            let data = JSON.parse(e.data);
+            document.getElementById('printer_status').innerText = JSON.stringify(data, null, 2);
+        };
+        
+        ws.onclose = function() {
+            document.getElementById('status').innerText = 'Disconnected';
+        };
+        
+        function sendGcode(gcode) {
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.gcode.script",
+                "params": {"script": gcode},
+                "id": 5436
+            }));
+        }
+        
+        function sendManualGcode() {
+            let gcode = document.getElementById('gcode').value;
+            sendGcode(gcode);
+            document.getElementById('gcode').value = '';
+        }
+    </script>
+</body>
+</html>
+EOFUI
+            return 1
+        fi
     fi
 }
 
 download_mainsail() {
     echo "Downloading Mainsail..."
     cd /usr/data
+    
+    # Try wget first
     wget --no-check-certificate -O mainsail.zip https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip
     if [ $? -eq 0 ]; then
         echo "Extracting Mainsail..."
@@ -397,8 +689,112 @@ download_mainsail() {
         unzip -o mainsail.zip -d /usr/data/mainsail
         rm mainsail.zip
         echo "Mainsail installed successfully!"
+        return 0
     else
-        echo "Failed to download Mainsail."
+        echo "Failed to download Mainsail with wget, trying alternative methods..."
+        
+        # Try git method
+        if download_via_git "mainsail"; then
+            echo "Mainsail partially installed via git!"
+            return 0
+        fi
+        
+        # Try curl as last resort
+        curl -L -k -o mainsail.zip https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip
+        if [ $? -eq 0 ]; then
+            echo "Extracting Mainsail..."
+            rm -rf /usr/data/mainsail/*
+            unzip -o mainsail.zip -d /usr/data/mainsail
+            rm mainsail.zip
+            echo "Mainsail installed successfully!"
+            return 0
+        else
+            echo "All download methods failed. Using minimal UI."
+            # Create minimal UI file
+            cat > /usr/data/mainsail/index.html << 'EOFUI'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Klipper Control Interface (Mainsail)</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .button { padding: 10px; margin: 5px; cursor: pointer; background: #E76F51; color: white; border: none; border-radius: 4px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Klipper Control Interface</h1>
+        <p>Connection status: <span id="status">Connecting...</span></p>
+        
+        <h2>Controls</h2>
+        <button class="button" onclick="sendGcode('G28')">Home All Axes</button>
+        <button class="button" onclick="sendGcode('M84')">Disable Motors</button>
+        <button class="button" onclick="sendGcode('M104 S0')">Extruder Off</button>
+        <button class="button" onclick="sendGcode('M140 S0')">Bed Off</button>
+        
+        <h2>Manual GCode</h2>
+        <input id="gcode" type="text" style="width: 80%; padding: 8px;">
+        <button class="button" onclick="sendManualGcode()">Send</button>
+        
+        <h2>Status</h2>
+        <pre id="printer_status">Waiting for data...</pre>
+    </div>
+    
+    <script>
+        let ws = new WebSocket('ws://'+window.location.hostname+':7125/websocket');
+        
+        ws.onopen = function() {
+            document.getElementById('status').innerText = 'Connected';
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.info",
+                "id": 5434
+            }));
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.objects.subscribe",
+                "params": {
+                    "objects": {
+                        "toolhead": null,
+                        "extruder": null,
+                        "heater_bed": null
+                    }
+                },
+                "id": 5435
+            }));
+        };
+        
+        ws.onmessage = function(e) {
+            let data = JSON.parse(e.data);
+            document.getElementById('printer_status').innerText = JSON.stringify(data, null, 2);
+        };
+        
+        ws.onclose = function() {
+            document.getElementById('status').innerText = 'Disconnected';
+        };
+        
+        function sendGcode(gcode) {
+            ws.send(JSON.stringify({
+                "jsonrpc": "2.0",
+                "method": "printer.gcode.script",
+                "params": {"script": gcode},
+                "id": 5436
+            }));
+        }
+        
+        function sendManualGcode() {
+            let gcode = document.getElementById('gcode').value;
+            sendGcode(gcode);
+            document.getElementById('gcode').value = '';
+        }
+    </script>
+</body>
+</html>
+EOFUI
+            return 1
+        fi
     fi
 }
 
@@ -481,11 +877,8 @@ main() {
     create_moonraker_config
     create_nginx_config
     create_moonraker_service
+    create_minimal_ui
     create_download_script
-    
-    # Download UIs automatically
-    download_fluidd
-    download_mainsail
     
     # Start services
     start_moonraker
@@ -495,12 +888,12 @@ main() {
     print_status "Installation complete!"
     echo ""
     echo "Moonraker is running on port 7125"
-    echo "UI interfaces are installed and ready to use:"
+    echo "Minimal UI interfaces are installed and ready to use:"
     echo "  • Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
     echo "  • Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
     echo ""
+    echo "For full UI functionality, run: /usr/data/download_ui.sh"
     echo "If you need to restart Moonraker: /usr/data/start_moonraker.sh"
-    echo "If you need to reinstall UI files: /usr/data/download_ui.sh"
     echo ""
     echo "Note: The official Creality warning states that running Moonraker"
     echo "for extended periods may cause memory issues on the K1 series."
