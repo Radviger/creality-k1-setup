@@ -1,55 +1,149 @@
 #!/bin/sh
 
-# This script addresses SSL issues and other problems with the Creality K1/K1-Max setup
+# Simplified installer for Mainsail and Fluidd on Creality K1/K1-Max
+# This script uses the native curl command and existing Nginx/Moonraker
 
-# Function to print and exit on error
-exit_on_error() {
-    echo "ERROR: $1"
-    exit 1
+# --- Configuration ---
+USR_DATA="/usr/data"
+FLUIDD_FOLDER="$USR_DATA/fluidd"
+MAINSAIL_FOLDER="$USR_DATA/mainsail"
+MOONRAKER_CFG="$USR_DATA/printer_data/config/moonraker.conf"
+NGINX_CONF_FILE="/opt/etc/nginx/nginx.conf"
+
+# --- Helper Functions ---
+function check_ipaddress() {
+  ip route get 1 | awk '{print $7;exit}'
 }
 
-# Function to print warning but continue
-warn() {
-    echo "WARNING: $1"
+function print_banner() {
+  echo "================================================="
+  echo "   Creality K1/K1-Max Mainsail/Fluidd Installer"
+  echo "================================================="
+  echo ""
 }
 
-# Function to print step information
-step() {
-    echo ""
-    echo "====================================================================="
-    echo "STEP: $1"
-    echo "====================================================================="
+function install_mainsail() {
+  echo "Installing Mainsail..."
+  
+  # Create directory
+  if [ -d "$MAINSAIL_FOLDER" ]; then
+    echo "Removing existing Mainsail directory..."
+    rm -rf "$MAINSAIL_FOLDER"
+  fi
+  mkdir -p "$MAINSAIL_FOLDER"
+  
+  # Download and extract Mainsail
+  echo "Downloading Mainsail..."
+  curl --insecure -L "https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip" -o "$USR_DATA/mainsail.zip"
+  if [ $? -ne 0 ]; then
+    echo "Failed to download Mainsail. Trying with wget..."
+    wget --no-check-certificate -O "$USR_DATA/mainsail.zip" "https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip"
+    if [ $? -ne 0 ]; then
+      echo "ERROR: Failed to download Mainsail!"
+      return 1
+    fi
+  fi
+  
+  echo "Extracting Mainsail..."
+  unzip -o "$USR_DATA/mainsail.zip" -d "$MAINSAIL_FOLDER"
+  rm -f "$USR_DATA/mainsail.zip"
+  
+  echo "Mainsail installed successfully!"
+  return 0
 }
 
-step "Installing necessary system packages"
-/opt/bin/opkg update
-/opt/bin/opkg install zlib python3-pillow gcc make
+function install_fluidd() {
+  echo "Installing Fluidd..."
+  
+  # Create directory
+  if [ -d "$FLUIDD_FOLDER" ]; then
+    echo "Removing existing Fluidd directory..."
+    rm -rf "$FLUIDD_FOLDER"
+  fi
+  mkdir -p "$FLUIDD_FOLDER"
+  
+  # Download and extract Fluidd
+  echo "Downloading Fluidd..."
+  curl --insecure -L "https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip" -o "$USR_DATA/fluidd.zip"
+  if [ $? -ne 0 ]; then
+    echo "Failed to download Fluidd. Trying with wget..."
+    wget --no-check-certificate -O "$USR_DATA/fluidd.zip" "https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip"
+    if [ $? -ne 0 ]; then
+      echo "ERROR: Failed to download Fluidd!"
+      return 1
+    fi
+  fi
+  
+  echo "Extracting Fluidd..."
+  unzip -o "$USR_DATA/fluidd.zip" -d "$FLUIDD_FOLDER"
+  rm -f "$USR_DATA/fluidd.zip"
+  
+  echo "Fluidd installed successfully!"
+  return 0
+}
 
-step "Setting up required directories for Mainsail/Fluidd"
-mkdir -p /usr/data/fluidd
-mkdir -p /usr/data/mainsail
+function configure_nginx() {
+  echo "Configuring Nginx..."
+  
+  # Create nginx.conf with proper syntax
+  mkdir -p /opt/etc/nginx
+  cat > "$NGINX_CONF_FILE" << 'EOF'
+worker_processes 1;
+pid /opt/var/run/nginx.pid;
 
-step "Downloading Fluidd without SSL verification"
-cd /usr/data
-rm -rf /usr/data/fluidd
-# Using --no-check-certificate to bypass SSL verification issues
-wget --no-check-certificate -O fluidd.zip https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip || exit_on_error "Failed to download Fluidd"
-unzip fluidd.zip -d fluidd || exit_on_error "Failed to extract Fluidd"
-rm fluidd.zip
+events {
+    worker_connections 1024;
+}
 
-step "Downloading Mainsail without SSL verification"
-cd /usr/data
-rm -rf /usr/data/mainsail
-wget --no-check-certificate -O mainsail.zip https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip || exit_on_error "Failed to download Mainsail"
-unzip mainsail.zip -d mainsail || exit_on_error "Failed to extract Mainsail"
-rm mainsail.zip
+http {
+    include /opt/etc/nginx/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+    gzip on;
 
-step "Creating Moonraker config directory"
-mkdir -p /usr/data/printer_data/config
-mkdir -p /usr/data/printer_data/logs
+    server {
+        listen 80;
+        server_name _;
+        
+        # Fluidd
+        location /fluidd {
+            alias /usr/data/fluidd;
+            index index.html;
+            try_files $uri $uri/ /fluidd/index.html;
+        }
 
-step "Creating Moonraker configuration"
-cat > /usr/data/printer_data/config/moonraker.conf << 'EOF'
+        # Mainsail
+        location /mainsail {
+            alias /usr/data/mainsail;
+            index index.html;
+            try_files $uri $uri/ /mainsail/index.html;
+        }
+
+        # Moonraker
+        location /moonraker {
+            proxy_pass http://127.0.0.1:7125;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+        }
+    }
+}
+EOF
+
+  echo "Nginx configured successfully!"
+  return 0
+}
+
+function configure_moonraker() {
+  echo "Configuring Moonraker..."
+  
+  # Create moonraker.conf if it doesn't exist
+  mkdir -p "$USR_DATA/printer_data/config"
+  
+  if [ ! -f "$MOONRAKER_CFG" ]; then
+    cat > "$MOONRAKER_CFG" << 'EOF'
 [server]
 host: 0.0.0.0
 port: 7125
@@ -75,119 +169,89 @@ cors_domains:
 [octoprint_compat]
 
 [history]
+
+[update_manager]
+channel: dev
+refresh_interval: 168
+
+[update_manager mainsail]
+type: web
+channel: stable
+repo: mainsail-crew/mainsail
+path: ~/mainsail
+
+[update_manager fluidd]
+type: web
+channel: stable
+repo: fluidd-core/fluidd
+path: ~/fluidd
 EOF
+  else
+    # Update existing moonraker.conf with Mainsail and Fluidd entries if needed
+    if ! grep -q "\[update_manager mainsail\]" "$MOONRAKER_CFG"; then
+      cat >> "$MOONRAKER_CFG" << 'EOF'
 
-step "Creating Nginx configuration"
-mkdir -p /opt/etc/nginx
-# Make sure we remove any previous nginx.conf
-rm -f /opt/etc/nginx/nginx.conf
-cat > /opt/etc/nginx/nginx.conf << 'EOF'
-# Nginx configuration for Fluidd and Mainsail
-worker_processes 1;
-pid /var/run/nginx.pid;
+[update_manager mainsail]
+type: web
+channel: stable
+repo: mainsail-crew/mainsail
+path: ~/mainsail
+EOF
+    fi
+    
+    if ! grep -q "\[update_manager fluidd\]" "$MOONRAKER_CFG"; then
+      cat >> "$MOONRAKER_CFG" << 'EOF'
 
-events {
-    worker_connections 1024;
+[update_manager fluidd]
+type: web
+channel: stable
+repo: fluidd-core/fluidd
+path: ~/fluidd
+EOF
+    fi
+  fi
+
+  echo "Moonraker configured successfully!"
+  return 0
 }
 
-http {
-    include mime.types;
-    default_type application/octet-stream;
-    sendfile on;
-    keepalive_timeout 65;
-    gzip on;
-
-    server {
-        listen 80;
-        server_name _;
-        
-        access_log /var/log/nginx_access.log;
-        error_log /var/log/nginx_error.log;
-
-        # Fluidd
-        location /fluidd {
-            alias /usr/data/fluidd;
-            index index.html;
-            try_files $uri $uri/ /fluidd/index.html;
-        }
-
-        # Mainsail
-        location /mainsail {
-            alias /usr/data/mainsail;
-            index index.html;
-            try_files $uri $uri/ /mainsail/index.html;
-        }
-
-        # Moonraker API
-        location /moonraker {
-            proxy_pass http://127.0.0.1:7125;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-        }
-    }
+function restart_services() {
+  echo "Restarting services..."
+  
+  # Restart Nginx
+  if [ -f /opt/etc/init.d/S80nginx ]; then
+    /opt/etc/init.d/S80nginx restart
+  else
+    killall nginx 2>/dev/null || true
+    /opt/sbin/nginx
+  fi
+  
+  echo "Services restarted successfully!"
+  return 0
 }
-EOF
 
-# Create a simple script to manually launch Moonraker
-step "Creating Moonraker launcher script"
-cat > /usr/data/launch_moonraker.sh << 'EOF'
-#!/bin/sh
+# --- Main Script ---
+print_banner
 
-# Kill any existing Moonraker processes
-pkill -f moonraker/moonraker.py || true
+# Install and configure everything
+install_mainsail
+install_fluidd
+configure_nginx
+configure_moonraker
+restart_services
 
-# Change to the moonraker directory
-cd /usr/data/moonraker
-
-# Launch Moonraker with the correct path and output to a log file
-PYTHONPATH=/usr/data/moonraker python3 /usr/data/moonraker/moonraker/moonraker.py -d /usr/data/printer_data > /usr/data/printer_data/logs/moonraker.log 2>&1 &
-
-echo "Moonraker launched in background. Check logs at /usr/data/printer_data/logs/moonraker.log"
-EOF
-chmod +x /usr/data/launch_moonraker.sh
-
-step "Ensuring Moonraker directory exists"
-cd /usr/data
-if [ ! -d "moonraker" ]; then
-    echo "Cloning Moonraker repository..."
-    git clone --depth=1 --single-branch https://github.com/Arksine/moonraker.git || exit_on_error "Failed to clone Moonraker"
-fi
-
-# Modify pip.conf to disable SSL verification for pip
-step "Configuring pip to ignore SSL verification"
-mkdir -p ~/.pip
-cat > ~/.pip/pip.conf << 'EOF'
-[global]
-trusted-host = pypi.python.org
-               pypi.org
-               files.pythonhosted.org
-EOF
-
-# Install only essential Moonraker dependencies directly to system Python
-step "Installing minimal Moonraker dependencies"
-pip3 install --no-cache-dir tornado pyserial jinja2 || warn "Some dependencies failed to install"
-
-step "Starting services"
-# Restart Nginx with new configuration
-killall -q nginx || true
-sleep 1
-/opt/sbin/nginx || warn "Failed to start Nginx directly"
-
+# Final message
 echo ""
-echo "==============================================================="
-echo "INSTALLATION COMPLETED"
-echo "==============================================================="
+echo "================================================="
+echo " Installation Complete!"
+echo "================================================="
 echo ""
-echo "To start Moonraker, run:"
-echo "  /usr/data/launch_moonraker.sh"
+echo "Your interfaces are available at:"
+echo "- Mainsail: http://$(check_ipaddress)/mainsail"
+echo "- Fluidd: http://$(check_ipaddress)/fluidd"
 echo ""
-echo "Once running, you can access:"
-echo "- Fluidd: http://$(ip route get 1 | awk '{print $7;exit}')/fluidd"
-echo "- Mainsail: http://$(ip route get 1 | awk '{print $7;exit}')/mainsail"
+echo "If Moonraker is not running, you can start it with:"
+echo "- Use existing Creality startup script"
+echo "- Or manually run: python3 /usr/data/moonraker/moonraker/moonraker.py -d /usr/data/printer_data"
 echo ""
-echo "If you encounter any issues, check the log files at:"
-echo "- Moonraker log: /usr/data/printer_data/logs/moonraker.log"
-echo "- Nginx access log: /var/log/nginx_access.log"
-echo "- Nginx error log: /var/log/nginx_error.log"
+echo "Enjoy!"
