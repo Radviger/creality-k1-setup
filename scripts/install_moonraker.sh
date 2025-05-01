@@ -1,149 +1,185 @@
 #!/bin/sh
 
-# Revised script for installing Moonraker on Creality K1/K1-Max
-# This script is modified to match the approach used in Creality Helper Script
+# Creality K1 Compatible Moonraker/Nginx Installation Script
+# Based on official Creality K1 Series Annex repository files
 
-# Function to print and exit on error
-exit_on_error() {
+# Exit on errors
+set -e
+
+# Directories
+USR_DATA="/usr/data"
+MOONRAKER_DIR="${USR_DATA}/moonraker"
+VENV_DIR="${USR_DATA}/moonraker-env"
+CONFIG_DIR="${USR_DATA}/printer_data/config"
+LOGS_DIR="${USR_DATA}/printer_data/logs"
+FLUIDD_DIR="${USR_DATA}/fluidd"
+MAINSAIL_DIR="${USR_DATA}/mainsail"
+TMPDIR="${USR_DATA}/tmp"
+
+# Create directories
+mkdir -p "${TMPDIR}"
+mkdir -p "${CONFIG_DIR}"
+mkdir -p "${LOGS_DIR}"
+mkdir -p "${FLUIDD_DIR}"
+mkdir -p "${MAINSAIL_DIR}"
+
+# Set TMPDIR for pip installations
+export TMPDIR="${TMPDIR}"
+
+# Path to Entware
+export PATH=$PATH:/opt/bin:/opt/sbin
+
+# Print status message
+print_status() {
+    echo "===================================================================="
     echo "$1"
+    echo "===================================================================="
+}
+
+# Exit on error
+exit_on_error() {
+    echo "ERROR: $1"
     exit 1
 }
 
-# Set the working directory and temp directory
-WORKING_DIR="/usr/data"
-MOONRAKER_DIR="$WORKING_DIR/moonraker"
-VENV_DIR="$WORKING_DIR/moonraker-env"
-TMPDIR="$WORKING_DIR/tmp"
-CONFIG_DIR="$WORKING_DIR/printer_data/config"
-LOGS_DIR="$WORKING_DIR/printer_data/logs"
-FLUIDD_FOLDER="$WORKING_DIR/fluidd"
-MAINSAIL_FOLDER="$WORKING_DIR/mainsail"
-
-# Ensure directories exist
-mkdir -p "$TMPDIR"
-mkdir -p "$CONFIG_DIR"
-mkdir -p "$LOGS_DIR"
-
-# Export TMPDIR to use during pip installations
-export TMPDIR="$TMPDIR"
-
-# Add Entware to PATH
-export PATH=$PATH:/opt/bin:/opt/sbin
-
-# Clean up any previous remnants to ensure a fresh start
-cleanup_previous() {
-    echo "Cleaning up previous installation files..."
-    rm -rf "$TMPDIR"/*
-    rm -rf /root/.cache/pip
-    mkdir -p "$TMPDIR"
-}
-
-# Check if bash is installed
-check_bash() {
-    BASH_PATH=$(which bash)
-    if [ -z "$BASH_PATH" ]; then
-        echo "Bash is not installed. Installing bash..."
-        /opt/bin/opkg install bash || exit_on_error "Failed to install bash"
-    fi
+# Clean up existing installations
+cleanup() {
+    print_status "Cleaning up any previous installation files"
+    
+    # Stop existing services
+    pkill -f "moonraker.py" || true
+    pkill -f "nginx" || true
+    
+    # Clean up temporary files
+    rm -rf "${TMPDIR:?}"/*
+    rm -rf /root/.cache/pip || true
+    mkdir -p "${TMPDIR}"
 }
 
 # Install Moonraker
 install_moonraker() {
-    echo "Installing Moonraker..."
+    print_status "Installing Moonraker"
     
-    # Check if directory exists and remove if necessary
-    if [ -d "$MOONRAKER_DIR" ]; then
+    # Check if Moonraker directory exists and remove if necessary
+    if [ -d "${MOONRAKER_DIR}" ]; then
         echo "Moonraker directory already exists. Deleting..."
-        rm -rf $MOONRAKER_DIR || exit_on_error "Failed to delete directory $MOONRAKER_DIR"
+        rm -rf "${MOONRAKER_DIR}" || exit_on_error "Failed to delete ${MOONRAKER_DIR}"
     fi
     
     # Create directory and clone repository
-    mkdir -p $MOONRAKER_DIR || exit_on_error "Failed to create directory $MOONRAKER_DIR"
-    cd $WORKING_DIR || exit_on_error "Failed to change directory to $WORKING_DIR"
+    mkdir -p "${MOONRAKER_DIR}" || exit_on_error "Failed to create ${MOONRAKER_DIR}"
+    cd "${USR_DATA}" || exit_on_error "Failed to change directory to ${USR_DATA}"
     
     # Clone with --depth=1 to minimize disk usage
-    git clone --depth=1 https://github.com/Arksine/moonraker.git $MOONRAKER_DIR || exit_on_error "Failed to clone Moonraker"
+    git clone --depth=1 https://github.com/Arksine/moonraker.git "${MOONRAKER_DIR}" || exit_on_error "Failed to clone Moonraker"
     
-    cd $MOONRAKER_DIR || exit_on_error "Failed to change directory to $MOONRAKER_DIR"
-    echo "Checking if install-moonraker.sh exists..."
-    ls -l ./scripts/
-    if [ ! -f "./scripts/install-moonraker.sh" ]; then
-        exit_on_error "install-moonraker.sh not found"
-    fi
-    
-    # Modify the install script to work without sudo and apt-get
-    echo "Modifying install-moonraker.sh to work without sudo and apt-get..."
-    sed -i 's/sudo //g' ./scripts/install-moonraker.sh
-    sed -i '/apt-get/d' ./scripts/install-moonraker.sh
+    echo "Moonraker installed successfully"
 }
 
-# Set up the virtual environment
+# Set up Python virtual environment
 setup_venv() {
-    echo "Setting up Python virtual environment..."
+    print_status "Setting up Python virtual environment"
     
     # Remove existing virtual environment if it exists
-    if [ -d "$VENV_DIR" ]; then
+    if [ -d "${VENV_DIR}" ]; then
         echo "Removing existing virtual environment..."
-        rm -rf "$VENV_DIR"
+        rm -rf "${VENV_DIR}"
     fi
-    
-    # Install virtualenv if needed
-    echo "Checking for virtualenv..."
-    pip3 install virtualenv || {
-        echo "Failed to install virtualenv with pip3, trying with opkg..."
-        /opt/bin/opkg update
-        /opt/bin/opkg install python3-virtualenv || true
-    }
     
     # Create virtual environment using system packages to save space
     echo "Creating virtual environment with system packages..."
-    python3 -m venv --system-site-packages "$VENV_DIR" || {
+    python3 -m venv --system-site-packages "${VENV_DIR}" || {
         echo "Failed to create virtual environment with venv module."
         echo "Creating minimal virtual environment..."
         
         # Create directory structure
-        mkdir -p "$VENV_DIR/bin"
-        mkdir -p "$VENV_DIR/lib/python3.8/site-packages"
+        mkdir -p "${VENV_DIR}/bin"
+        mkdir -p "${VENV_DIR}/lib/python3.8/site-packages"
+        
+        # Copy activate script
+        cat > "${VENV_DIR}/bin/activate" << 'EOF'
+# This file must be used with "source bin/activate" *from bash*
+# You cannot run it directly
+deactivate () {
+    unset -f pydoc >/dev/null 2>&1
+    unset -f deactivate
+    unset VIRTUAL_ENV
+    if [ ! "${1:-}" = "nondestructive" ] ; then
+    # Self destruct!
+        unset -f deactivate
+    fi
+}
+VIRTUAL_ENV="$VENV_DIR"
+export VIRTUAL_ENV
+_OLD_VIRTUAL_PATH="$PATH"
+PATH="$VIRTUAL_ENV/bin:$PATH"
+export PATH
+EOF
         
         # Create symlinks to system Python
-        ln -sf $(which python3) "$VENV_DIR/bin/python"
-        ln -sf $(which python3) "$VENV_DIR/bin/python3"
-        ln -sf $(which pip3) "$VENV_DIR/bin/pip"
-        ln -sf $(which pip3) "$VENV_DIR/bin/pip3"
+        ln -sf $(which python3) "${VENV_DIR}/bin/python"
+        ln -sf $(which python3) "${VENV_DIR}/bin/python3"
+        ln -sf $(which pip3) "${VENV_DIR}/bin/pip"
+        ln -sf $(which pip3) "${VENV_DIR}/bin/pip3"
     }
+    
+    # Install minimal dependencies
+    echo "Installing minimal Python dependencies..."
+    pip3 install tornado==6.1 pyserial pillow --no-cache-dir || echo "Warning: Some dependencies failed to install, but we'll continue anyway"
+    
+    echo "Python virtual environment set up successfully"
 }
 
 # Create Moonraker configuration
 create_moonraker_config() {
-    echo "Creating Moonraker configuration..."
+    print_status "Creating Moonraker configuration"
     
-    cat > "$CONFIG_DIR/moonraker.conf" << 'EOF'
+    cat > "${CONFIG_DIR}/moonraker.conf" << 'EOF'
 [server]
 host: 0.0.0.0
 port: 7125
 klippy_uds_address: /tmp/klippy_uds
 # Disable dbus_manager to avoid dependency issues
 disabled_components: ["dbus_manager"]
+max_upload_size: 1024
+
+[file_manager]
+queue_gcode_uploads: False
+enable_object_processing: False
+enable_inotify_warnings: True
+
+[database]
+#enable_database_debug: False
+
+[data_store]
+temperature_store_size: 600
+gcode_store_size: 1000
+
+[machine]
+provider: none
+validate_service: False
+validate_config: False
 
 [authorization]
-trusted_clients:
-    10.0.0.0/8
-    127.0.0.0/8
-    169.254.0.0/16
-    172.16.0.0/12
-    192.168.0.0/16
-    FE80::/10
-    ::1/128
+force_logins: False
 cors_domains:
-    http://*.lan
-    http://*.local
-    https://my.mainsail.xyz
-    http://my.mainsail.xyz
-    https://app.fluidd.xyz
-    http://app.fluidd.xyz
+  *.local
+  *.lan
+  *://app.fluidd.xyz
 
+trusted_clients:
+  10.0.0.0/8
+  127.0.0.0/8
+  169.254.0.0/16
+  172.16.0.0/12
+  192.168.0.0/16
+  FE80::/10
+  ::1/128
+
+# enables partial support of Octoprint API
 [octoprint_compat]
 
+# enables moonraker to track and store print history.
 [history]
 
 [update_manager]
@@ -163,114 +199,256 @@ repo: fluidd-core/fluidd
 path: /usr/data/fluidd
 EOF
 
-    echo "Moonraker configuration created."
+    echo "Moonraker configuration created"
 }
 
-# Create Nginx configuration - using the same format as the existing conf file
+# Create Nginx configuration
 create_nginx_config() {
-    echo "Creating Nginx configuration..."
+    print_status "Creating Nginx configuration"
     
     mkdir -p /opt/etc/nginx
     
     cat > /opt/etc/nginx/nginx.conf << 'EOF'
-server {
-    listen 80;
-    server_name _;
-    
-    location /fluidd {
-        alias /usr/data/fluidd;
-        try_files $uri $uri/ /index.html;
-    }
-    
-    location /mainsail {
-        alias /usr/data/mainsail;
-        try_files $uri $uri/ /index.html;
-    }
-    
-    location /moonraker {
-        proxy_pass http://localhost:7125;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-    }
+#user  nobody;
+worker_processes  1;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+#error_log  logs/error.log  info;
+
+#pid        logs/nginx.pid;
+
+
+events {
+    worker_connections  1024;
 }
 
-server {
-    listen 4408;
-    server_name _;
-    
-    root /usr/data/fluidd;
-    
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-    
-    location /websocket {
-        proxy_pass http://localhost:7125/websocket;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-    }
-    
-    location ~ ^/(printer|api|access|machine|server)/ {
-        proxy_pass http://localhost:7125;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-}
 
-server {
-    listen 4409;
-    server_name _;
-    
-    root /usr/data/mainsail;
-    
-    location / {
-        try_files $uri $uri/ /index.html;
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    #log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+    #                  '$status $body_bytes_sent "$http_referer" '
+    #                  '"$http_user_agent" "$http_x_forwarded_for"';
+
+    #access_log  logs/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    server {
+        listen 4408 default_server;
+
+        #access_log /var/log/nginx/fluidd-access.log;
+        #error_log /var/log/nginx/fluidd-error.log;
+
+        # disable this section on smaller hardware like a pi zero
+        gzip on;
+        gzip_vary on;
+        gzip_proxied any;
+        gzip_proxied expired no-cache no-store private auth;
+        gzip_comp_level 4;
+        gzip_buffers 16 8k;
+        gzip_http_version 1.1;
+        gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/json application/xml;
+
+        # web_path from fluidd static files
+        root /usr/data/fluidd;
+
+        index index.html;
+        server_name _;
+
+        # disable max upload size checks
+        client_max_body_size 0;
+
+        # disable proxy request buffering
+        proxy_request_buffering off;
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        location = /index.html {
+            add_header Cache-Control "no-store, no-cache, must-revalidate";
+        }
+
+        location /websocket {
+            proxy_pass http://apiserver/websocket;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_read_timeout 86400;
+        }
+
+        location ~ ^/(printer|api|access|machine|server)/ {
+            proxy_pass http://apiserver$request_uri;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Scheme $scheme;
+        }
+
+        location /webcam/ {
+            proxy_pass http://mjpgstreamer1/;
+        }
+
+        location /webcam2/ {
+            proxy_pass http://mjpgstreamer2/;
+        }
+
+        location /webcam3/ {
+            proxy_pass http://mjpgstreamer3/;
+        }
+
+        location /webcam4/ {
+            proxy_pass http://mjpgstreamer4/;
+        }
     }
-    
-    location /websocket {
-        proxy_pass http://localhost:7125/websocket;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
+
+    server {
+        listen 4409 default_server;
+        # uncomment the next line to activate IPv6
+        # listen [::]:80 default_server;
+
+        #access_log /var/log/nginx/mainsail-access.log;
+        #error_log /var/log/nginx/mainsail-error.log;
+
+        # disable this section on smaller hardware like a pi zero
+        gzip on;
+        gzip_vary on;
+        gzip_proxied any;
+        gzip_proxied expired no-cache no-store private auth;
+        gzip_comp_level 4;
+        gzip_buffers 16 8k;
+        gzip_http_version 1.1;
+        gzip_types text/plain text/css text/xml text/javascript application/javascript application/x-javascript application/json application/xml;
+
+        # web_path from mainsail static files
+        root /usr/data/mainsail;
+
+        index index.html;
+        server_name _;
+
+        # disable max upload size checks
+        client_max_body_size 0;
+
+        # disable proxy request buffering
+        proxy_request_buffering off;
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        location = /index.html {
+            add_header Cache-Control "no-store, no-cache, must-revalidate";
+        }
+
+        location /websocket {
+            proxy_pass http://apiserver/websocket;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_read_timeout 86400;
+        }
+
+        location ~ ^/(printer|api|access|machine|server)/ {
+            proxy_pass http://apiserver$request_uri;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Scheme $scheme;
+        }
+
+        location /webcam/ {
+            postpone_output 0;
+            proxy_buffering off;
+            proxy_ignore_headers X-Accel-Buffering;
+            access_log off;
+            error_log off;
+            proxy_pass http://mjpgstreamer1/;
+        }
+
+        location /webcam2/ {
+            postpone_output 0;
+            proxy_buffering off;
+            proxy_ignore_headers X-Accel-Buffering;
+            access_log off;
+            error_log off;
+            proxy_pass http://mjpgstreamer2/;
+        }
+
+        location /webcam3/ {
+            postpone_output 0;
+            proxy_buffering off;
+            proxy_ignore_headers X-Accel-Buffering;
+            access_log off;
+            error_log off;
+            proxy_pass http://mjpgstreamer3/;
+        }
+
+        location /webcam4/ {
+            postpone_output 0;
+            proxy_buffering off;
+            proxy_ignore_headers X-Accel-Buffering;
+            access_log off;
+            error_log off;
+            proxy_pass http://mjpgstreamer4/;
+        }
     }
-    
-    location ~ ^/(printer|api|access|machine|server)/ {
-        proxy_pass http://localhost:7125;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+    upstream apiserver {
+        ip_hash;
+        server 127.0.0.1:7125;
+    }
+
+    upstream mjpgstreamer1 {
+        ip_hash;
+        server 127.0.0.1:8080;
+    }
+
+    upstream mjpgstreamer2 {
+        ip_hash;
+        server 127.0.0.1:8081;
+    }
+
+    upstream mjpgstreamer3 {
+        ip_hash;
+        server 127.0.0.1:8082;
+    }
+
+    upstream mjpgstreamer4 {
+        ip_hash;
+        server 127.0.0.1:8083;
     }
 }
 EOF
 
-    echo "Nginx configuration created."
+    echo "Nginx configuration created"
 }
 
-# Set up minimal dependencies directly
-install_minimal_dependencies() {
-    echo "Installing minimal Python dependencies..."
+# Create Moonraker service startup script
+create_moonraker_service() {
+    print_status "Creating Moonraker service script"
     
-    # Use system pip to install basics
-    pip3 install tornado==6.1 --no-cache-dir || echo "Failed to install tornado, continuing anyway"
-    pip3 install pyserial --no-cache-dir || echo "Failed to install pyserial, continuing anyway"
-    pip3 install pillow --no-cache-dir || echo "Failed to install pillow, continuing anyway"
-    
-    echo "Basic dependencies installed."
-}
-
-# Create start script for Moonraker
-create_start_script() {
-    echo "Creating Moonraker start script..."
-    
-    cat > "$WORKING_DIR/start_moonraker.sh" << 'EOF'
+    cat > "${USR_DATA}/start_moonraker.sh" << 'EOF'
 #!/bin/sh
 
 # Kill any existing Moonraker process
@@ -283,76 +461,33 @@ python3 /usr/data/moonraker/moonraker/moonraker.py -d /usr/data/printer_data > /
 echo "Moonraker started!"
 EOF
 
-    chmod +x "$WORKING_DIR/start_moonraker.sh"
+    chmod +x "${USR_DATA}/start_moonraker.sh"
     
-    echo "Start script created at $WORKING_DIR/start_moonraker.sh"
+    echo "Moonraker service script created at ${USR_DATA}/start_moonraker.sh"
 }
 
-# Start Moonraker
-start_moonraker() {
-    echo "Starting Moonraker..."
-    "$WORKING_DIR/start_moonraker.sh"
+# Create placeholders for the UIs
+create_ui_placeholders() {
+    print_status "Creating UI placeholders"
     
-    # Wait a moment for startup
-    sleep 2
+    # Create placeholder for Fluidd
+    echo '<html><body><h1>Fluidd Placeholder</h1><p>The actual UI has not been downloaded yet.</p><p>Please use /usr/data/download_ui.sh to download it.</p></body></html>' > "${FLUIDD_DIR}/index.html"
     
-    # Check if it's running
-    if pgrep -f "moonraker.py" > /dev/null; then
-        echo "Moonraker is running!"
-    else
-        echo "Moonraker failed to start. Check logs at $LOGS_DIR/moonraker.log"
-    fi
+    # Create placeholder for Mainsail
+    echo '<html><body><h1>Mainsail Placeholder</h1><p>The actual UI has not been downloaded yet.</p><p>Please use /usr/data/download_ui.sh to download it.</p></body></html>' > "${MAINSAIL_DIR}/index.html"
+    
+    echo "UI placeholders created"
 }
 
-# Restart Nginx function (based on helper script approach)
-restart_nginx() {
-    echo "Restarting Nginx..."
-    
-    # Kill any existing Nginx process
-    killall nginx 2>/dev/null || true
-    
-    # Start Nginx
-    if [ -f "/opt/sbin/nginx" ]; then
-        echo "Starting Nginx with /opt/sbin/nginx..."
-        /opt/sbin/nginx
-    elif [ -f "/opt/bin/nginx" ]; then
-        echo "Starting Nginx with /opt/bin/nginx..."
-        /opt/bin/nginx
-    else
-        echo "Nginx executable not found."
-        return 1
-    fi
-    
-    # Check if it started
-    if pgrep nginx > /dev/null; then
-        echo "Nginx restarted successfully!"
-    else
-        echo "Failed to restart Nginx."
-        return 1
-    fi
-}
-
-# Create directories for UIs
-create_ui_dirs() {
-    echo "Creating UI directories..."
-    mkdir -p $FLUIDD_FOLDER
-    mkdir -p $MAINSAIL_FOLDER
-    
-    # Create minimal placeholder files
-    echo '<html><body><h1>Fluidd Placeholder</h1><p>UI not yet installed</p></body></html>' > $FLUIDD_FOLDER/index.html
-    echo '<html><body><h1>Mainsail Placeholder</h1><p>UI not yet installed</p></body></html>' > $MAINSAIL_FOLDER/index.html
-}
-
-# Create download script for UIs
+# Create script to download the UI files
 create_download_script() {
-    echo "Creating UI download script..."
+    print_status "Creating UI download script"
     
-    cat > "$WORKING_DIR/download_ui.sh" << 'EOF'
+    cat > "${USR_DATA}/download_ui.sh" << 'EOF'
 #!/bin/sh
 
-# Download Fluidd and Mainsail UIs
+# Download Fluidd and Mainsail UIs for Creality K1
 
-# Download Fluidd
 download_fluidd() {
     echo "Downloading Fluidd..."
     cd /usr/data
@@ -368,7 +503,6 @@ download_fluidd() {
     fi
 }
 
-# Download Mainsail
 download_mainsail() {
     echo "Downloading Mainsail..."
     cd /usr/data
@@ -384,13 +518,17 @@ download_mainsail() {
     fi
 }
 
-# Main execution
+# Main menu
+echo "===================================================================="
+echo "                   UI Download for Creality K1                      "
+echo "===================================================================="
+echo ""
 echo "Which UI would you like to download?"
-echo "1) Fluidd"
-echo "2) Mainsail"
-echo "3) Both"
+echo "1) Fluidd (port 4408)"
+echo "2) Mainsail (port 4409)"
+echo "3) Both UIs"
 echo "4) Quit"
-
+echo ""
 read -p "Enter your choice (1-4): " choice
 
 case "$choice" in
@@ -404,54 +542,80 @@ esac
 # Restart Nginx to apply changes
 echo "Restarting Nginx..."
 killall nginx 2>/dev/null || true
-if [ -f "/opt/sbin/nginx" ]; then
-    /opt/sbin/nginx
-elif [ -f "/opt/bin/nginx" ]; then
-    /opt/bin/nginx
-fi
+/opt/sbin/nginx
 
 echo "Done!"
 EOF
 
-    chmod +x "$WORKING_DIR/download_ui.sh"
+    chmod +x "${USR_DATA}/download_ui.sh"
     
-    echo "Download script created at $WORKING_DIR/download_ui.sh"
+    echo "Download script created at ${USR_DATA}/download_ui.sh"
+}
+
+# Start Moonraker
+start_moonraker() {
+    print_status "Starting Moonraker"
+    
+    "${USR_DATA}/start_moonraker.sh"
+    
+    # Check if Moonraker started
+    sleep 2
+    if pgrep -f "moonraker.py" > /dev/null; then
+        echo "Moonraker started successfully!"
+    else
+        echo "Warning: Moonraker may not have started properly. Check logs at ${LOGS_DIR}/moonraker.log"
+    fi
+}
+
+# Start Nginx
+start_nginx() {
+    print_status "Starting Nginx"
+    
+    # Kill any existing Nginx process
+    killall nginx 2>/dev/null || true
+    
+    # Start Nginx
+    /opt/sbin/nginx
+    
+    # Check if Nginx started
+    if pgrep nginx > /dev/null; then
+        echo "Nginx started successfully!"
+    else
+        echo "Warning: Nginx may not have started properly."
+        return 1
+    fi
 }
 
 # Main execution
 main() {
-    # Run all the functions in sequence
-    cleanup_previous
-    check_bash
+    print_status "Starting installation of Moonraker and Nginx for Creality K1"
+    
+    # Run all installation steps
+    cleanup
     install_moonraker
     setup_venv
-    install_minimal_dependencies
     create_moonraker_config
-    create_ui_dirs
     create_nginx_config
-    create_start_script
+    create_moonraker_service
+    create_ui_placeholders
     create_download_script
     start_moonraker
-    restart_nginx
+    start_nginx
     
     # Print completion message
-    echo "==========================================="
-    echo " Moonraker installation complete!"
-    echo "==========================================="
+    print_status "Installation complete!"
     echo ""
-    echo "You can now download the UI files with:"
-    echo "  /usr/data/download_ui.sh"
+    echo "Moonraker should now be running on port 7125"
+    echo "You can download the UI files with: /usr/data/download_ui.sh"
     echo ""
-    echo "Then access the interfaces at:"
+    echo "After downloading, you can access the UIs at:"
     echo "  Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
     echo "  Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
     echo ""
-    echo "You can also access via the main server:"
-    echo "  Fluidd: http://$(ip route get 1 | awk '{print $7;exit}')/fluidd"
-    echo "  Mainsail: http://$(ip route get 1 | awk '{print $7;exit}')/mainsail"
+    echo "If you need to restart Moonraker, use: /usr/data/start_moonraker.sh"
     echo ""
-    echo "If you need to restart Moonraker, use:"
-    echo "  /usr/data/start_moonraker.sh"
+    echo "Note: The official Creality warning states that running Moonraker"
+    echo "for extended periods may cause memory issues on the K1 series."
     echo ""
     echo "Enjoy!"
 }
