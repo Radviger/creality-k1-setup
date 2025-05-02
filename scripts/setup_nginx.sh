@@ -6,7 +6,12 @@ exit_on_error() {
     exit 1
 }
 
-# Clean up any existing Nginx configuration and stop Nginx service
+# Function for debug messaging
+debug() {
+    echo "[DEBUG] $1"
+}
+
+# Clean up any existing Nginx configuration and stop any existing Nginx
 rm -f /opt/etc/nginx/nginx.conf
 killall -q nginx 2>/dev/null || true
 sleep 1
@@ -21,20 +26,8 @@ fi
 # Create Nginx directories
 mkdir -p /opt/etc/nginx
 
-# Check which ports are available
-echo "Checking for available ports..."
-# Check if port 80 is in use
-nc -z localhost 80
-PORT_80_IN_USE=$?
-# Check if other ports are in use
-nc -z localhost 4408
-PORT_4408_IN_USE=$?
-nc -z localhost 4409
-PORT_4409_IN_USE=$?
-
-# Set up Nginx configuration with proper structure
-# Skip port 80 configuration if it's already in use
-echo "Creating new nginx.conf with proper structure"
+# Set up Nginx configuration - ONLY using dedicated ports, NOT port 80
+echo "Creating Nginx configuration with dedicated ports only"
 cat > /opt/etc/nginx/nginx.conf << 'EOF'
 worker_processes 1;
 
@@ -48,7 +41,7 @@ http {
     sendfile on;
     keepalive_timeout 65;
 
-    # Serve Fluidd on its own port
+    # Serve Fluidd UI on port 4408
     server {
         listen 4408;
         root /usr/data/fluidd;
@@ -80,7 +73,7 @@ http {
         }
     }
     
-    # Serve Mainsail on its own port
+    # Serve Mainsail UI on port 4409
     server {
         listen 4409;
         root /usr/data/mainsail;
@@ -119,7 +112,7 @@ http {
 }
 EOF
 
-# Verify structure is correct 
+# Verify the configuration structure
 if grep -q "^worker_processes" /opt/etc/nginx/nginx.conf && grep -q "^events {" /opt/etc/nginx/nginx.conf && grep -q "^http {" /opt/etc/nginx/nginx.conf; then
     echo "Nginx config structure verification passed"
 else
@@ -137,13 +130,23 @@ echo "Starting Nginx"
     exit_on_error "Failed to start Nginx"
 }
 
-# Check if Nginx is running (verification)
+# Check if Nginx is running
 sleep 2
-if pgrep -f nginx > /dev/null; then
-    echo "Nginx setup complete and service is running!"
+if ps | grep -v grep | grep -q nginx; then
+    echo "✓ Nginx setup complete and service is running!"
     
-    # Provide information about how to access the interfaces
-    IP=$(ip route get 1 | awk '{print $7;exit}')
+    # Show access information
+    IP=$(ifconfig | grep -A1 eth0 | grep "inet addr" | cut -d: -f2 | awk '{print $1}')
+    if [ -z "$IP" ]; then
+        IP=$(ifconfig | grep -A1 wlan0 | grep "inet addr" | cut -d: -f2 | awk '{print $1}')
+    fi
+    if [ -z "$IP" ]; then
+        IP=$(ip route get 1 | awk '{print $7;exit}' 2>/dev/null)
+    fi
+    if [ -z "$IP" ]; then
+        IP="your_printer_ip"
+    fi
+    
     echo ""
     echo "UI interfaces are installed and ready to use:"
     echo "  • Fluidd: http://${IP}:4408"
