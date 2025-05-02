@@ -69,7 +69,6 @@ EOF
 chown root:root /opt/etc/sudoers
 chmod 440 /opt/etc/sudoers
 
-
 # Check if Moonraker is already running
 if ps aux | grep '[m]oonraker' > /dev/null; then
     echo "Moonraker is already running. Configuring Fluidd and Mainsail with the existing Moonraker service."
@@ -80,9 +79,30 @@ if ps aux | grep '[m]oonraker' > /dev/null; then
 
     # Ensure scripts are executable
     chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
+    chmod +x "$SCRIPTS_DIR/install_ui_only.sh"
 
     # Run the Nginx setup script directly
     $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+    
+    # Run the UI installer script
+    echo "Installing UI files..."
+    $SCRIPTS_DIR/install_ui_only.sh
+    
+    echo "Installation complete! UI files have been installed."
+    IP=$(ifconfig | grep -A1 eth0 | grep "inet addr" | cut -d: -f2 | awk '{print $1}')
+    if [ -z "$IP" ]; then
+        IP=$(ifconfig | grep -A1 wlan0 | grep "inet addr" | cut -d: -f2 | awk '{print $1}')
+    fi
+    if [ -z "$IP" ]; then
+        IP=$(ip route get 1 | awk '{print $7;exit}' 2>/dev/null)
+    fi
+    if [ -z "$IP" ]; then
+        IP="your_printer_ip"
+    fi
+    
+    echo "You can access the interfaces at:"
+    echo "- Mainsail: http://${IP}:4409"
+    echo "- Fluidd: http://${IP}:4408"
     exit 0
 fi
 
@@ -261,41 +281,5 @@ chown -R moonrakeruser:moonrakeruser /usr/data
 echo "Running install_moonraker.sh..."
 sh "$SCRIPTS_DIR/install_moonraker.sh" || exit_on_error "Failed to run install_moonraker.sh"
 
-# Check if Nginx is installed
-if ! which nginx >/dev/null; then
-    # Trigger Nginx setup script
-    echo "Running setup_nginx.sh..."
-    $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
-else
-    echo "Nginx is already installed. Configuring existing Nginx..."
-    cat <<EOF > /opt/etc/nginx/nginx.conf
-server {
-    listen 80;
-    server_name _;
-
-    location /fluidd {
-        alias /usr/data/fluidd;
-        try_files \$uri \$uri/ /index.html;
-    }
-
-    location /mainsail {
-        alias /usr/data/mainsail;
-        try_files \$uri \$uri/ /index.html;
-    }
-
-    location /moonraker {
-        proxy_pass http://localhost:7125;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-    }
-}
-EOF
-
-    # Restart Nginx
-    /opt/etc/init.d/S80nginx restart || exit_on_error "Failed to restart Nginx"
-fi
-
 echo "Installation complete! Mainsail and Fluidd are installed."
-echo "You can access Mainsail at http://your_printer_ip/mainsail and Fluidd at http://your_printer_ip/fluidd"
+echo "You can access Mainsail at http://your_printer_ip:4409 and Fluidd at http://your_printer_ip:4408"
