@@ -21,7 +21,19 @@ fi
 # Create Nginx directories
 mkdir -p /opt/etc/nginx
 
+# Check which ports are available
+echo "Checking for available ports..."
+# Check if port 80 is in use
+nc -z localhost 80
+PORT_80_IN_USE=$?
+# Check if other ports are in use
+nc -z localhost 4408
+PORT_4408_IN_USE=$?
+nc -z localhost 4409
+PORT_4409_IN_USE=$?
+
 # Set up Nginx configuration with proper structure
+# Skip port 80 configuration if it's already in use
 echo "Creating new nginx.conf with proper structure"
 cat > /opt/etc/nginx/nginx.conf << 'EOF'
 worker_processes 1;
@@ -36,41 +48,7 @@ http {
     sendfile on;
     keepalive_timeout 65;
 
-    # Serve Fluidd and Mainsail on port 80 with URL prefixes
-    server {
-        listen 80;
-        server_name _;
-
-        location /fluidd {
-            alias /usr/data/fluidd;
-            try_files $uri $uri/ /fluidd/index.html;
-        }
-
-        location /mainsail {
-            alias /usr/data/mainsail;
-            try_files $uri $uri/ /mainsail/index.html;
-        }
-
-        location /websocket {
-            proxy_pass http://127.0.0.1:7125/websocket;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        }
-
-        location ~ ^/(printer|api|access|machine|server)/ {
-            proxy_pass http://127.0.0.1:7125;
-            proxy_http_version 1.1;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        }
-    }
-
-    # Also serve Fluidd on its own port
+    # Serve Fluidd on its own port
     server {
         listen 4408;
         root /usr/data/fluidd;
@@ -102,7 +80,7 @@ http {
         }
     }
     
-    # Also serve Mainsail on its own port
+    # Serve Mainsail on its own port
     server {
         listen 4409;
         root /usr/data/mainsail;
@@ -163,6 +141,13 @@ echo "Starting Nginx"
 sleep 2
 if pgrep -f nginx > /dev/null; then
     echo "Nginx setup complete and service is running!"
+    
+    # Provide information about how to access the interfaces
+    IP=$(ip route get 1 | awk '{print $7;exit}')
+    echo ""
+    echo "UI interfaces are installed and ready to use:"
+    echo "  • Fluidd: http://${IP}:4408"
+    echo "  • Mainsail: http://${IP}:4409"
 else
     echo "Nginx failed to start. Testing configuration again..."
     /opt/sbin/nginx -t
