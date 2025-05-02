@@ -461,28 +461,51 @@ EOF
     echo "Moonraker service script created at ${USR_DATA}/start_moonraker.sh"
 }
 
-# Install UI files - UPDATED
+# Install UI files - USE GIT CLONE 
 install_ui_files() {
-    print_status "Installing UI files from repository"
+    print_status "Installing UI files via git clone"
     
-    # Check if prepackaged UI files exist in repository
-    REPO_DIR="/usr/data/creality-k1-setup"
+    # Create temporary directory
+    TEMP_CLONE="/usr/data/tmp"
+    mkdir -p "${TEMP_CLONE}"
     
-    if [ -d "${REPO_DIR}/prepackaged/mainsail" ] && [ "$(ls -A ${REPO_DIR}/prepackaged/mainsail 2>/dev/null)" ]; then
-        debug "Found prepackaged Mainsail UI files in repository"
-        cp -R "${REPO_DIR}/prepackaged/mainsail/"* "${MAINSAIL_DIR}/"
-        debug "Copied Mainsail UI files to ${MAINSAIL_DIR}"
+    # Install Mainsail
+    debug "Installing Mainsail UI..."
+    rm -rf "${MAINSAIL_DIR}"/*
+    cd "${TEMP_CLONE}"
+    debug "Cloning Mainsail repository..."
+    
+    if git clone --depth=1 https://github.com/mainsail-crew/mainsail.git; then
+        if [ -d "${TEMP_CLONE}/mainsail" ]; then
+            # Check if dist directory exists (for production builds)
+            if [ -d "${TEMP_CLONE}/mainsail/dist" ]; then
+                cp -r "${TEMP_CLONE}/mainsail/dist/"* "${MAINSAIL_DIR}/"
+            else
+                # Copy all files if no dist directory
+                cp -r "${TEMP_CLONE}/mainsail/"* "${MAINSAIL_DIR}/"
+            fi
+            rm -rf "${TEMP_CLONE}/mainsail"
+            debug "Mainsail UI files installed successfully"
+        fi
     else
-        debug "No prepackaged Mainsail UI files found in repository"
+        debug "Failed to clone Mainsail repository, installation will continue with placeholders"
         create_minimal_ui "mainsail"
     fi
     
-    if [ -d "${REPO_DIR}/prepackaged/fluidd" ] && [ "$(ls -A ${REPO_DIR}/prepackaged/fluidd 2>/dev/null)" ]; then
-        debug "Found prepackaged Fluidd UI files in repository"
-        cp -R "${REPO_DIR}/prepackaged/fluidd/"* "${FLUIDD_DIR}/"
-        debug "Copied Fluidd UI files to ${FLUIDD_DIR}"
+    # Install Fluidd
+    debug "Installing Fluidd UI..."
+    rm -rf "${FLUIDD_DIR}"/*
+    cd "${TEMP_CLONE}"
+    debug "Cloning Fluidd repository..."
+    
+    if git clone --depth=1 https://github.com/fluidd-core/fluidd.git; then
+        if [ -d "${TEMP_CLONE}/fluidd" ]; then
+            cp -r "${TEMP_CLONE}/fluidd/"* "${FLUIDD_DIR}/"
+            rm -rf "${TEMP_CLONE}/fluidd"
+            debug "Fluidd UI files installed successfully"
+        fi
     else
-        debug "No prepackaged Fluidd UI files found in repository"
+        debug "Failed to clone Fluidd repository, installation will continue with placeholders"
         create_minimal_ui "fluidd"
     fi
 }
@@ -773,23 +796,19 @@ main() {
     # Verify installation
     verify_installation
     
-    # Print completion message
     print_status "Installation complete!"
-    echo ""
-    echo "Moonraker is running on port 7125"
-    echo "UI interfaces are installed and ready to use:"
-    echo "  • Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
-    echo "  • Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
-    echo ""
-    echo "For full UI functionality (if not already installed), run: /usr/data/download_ui.sh"
-    echo "If you need to restart Moonraker: /usr/data/start_moonraker.sh"
-    echo ""
-    echo "Note: The official Creality warning states that running Moonraker"
-    echo "for extended periods may cause memory issues on the K1 series."
-    echo ""
-    echo "Installation log saved to: ${SCRIPT_LOG}"
-    echo ""
-    echo "Enjoy!"
+echo ""
+echo "Moonraker is running on port 7125"
+echo "UI interfaces are installed and ready to use:"
+echo "  • Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
+echo "  • Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
+echo ""
+echo "Note: The official Creality warning states that running Moonraker"
+echo "for extended periods may cause memory issues on the K1 series."
+echo ""
+echo "Installation log saved to: ${SCRIPT_LOG}"
+echo ""
+echo "Enjoy!"
 }
 
 # Execute main function
