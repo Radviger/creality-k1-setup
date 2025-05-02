@@ -69,26 +69,64 @@ EOF
 chown root:root /opt/etc/sudoers
 chmod 440 /opt/etc/sudoers
 
-# Check if Moonraker is already running
-if ps aux | grep '[m]oonraker' > /dev/null; then
-    echo "Moonraker is already running. Configuring Fluidd and Mainsail with the existing Moonraker service."
+# Detect existing Moonraker installation
+EXISTING_MOONRAKER=$(ps aux | grep -v grep | grep moonraker | head -1 | awk '{print $11}')
+if [ -n "$EXISTING_MOONRAKER" ]; then
+    echo "Moonraker is already running at: $EXISTING_MOONRAKER"
+    echo "Configuring Fluidd and Mainsail with the existing Moonraker service."
 
     # Make sure directories exist for UI files
     mkdir -p /usr/data/fluidd
     mkdir -p /usr/data/mainsail
 
-    # Ensure scripts are executable
-    chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
-    chmod +x "$SCRIPTS_DIR/install_ui_only.sh"
-
-    # Run the Nginx setup script directly
-    $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+    # Make sure scripts are executable
+    if [ -f "$SCRIPTS_DIR/install_ui_only.sh" ]; then
+        chmod +x "$SCRIPTS_DIR/install_ui_only.sh"
+        chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
+        
+        # Run the UI installer script first
+        echo "Installing UI files..."
+        $SCRIPTS_DIR/install_ui_only.sh || echo "UI installation had issues, continuing..."
+        
+        # Run the Nginx setup script directly
+        $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+    else
+        # If script doesn't exist, try to get UI files directly with git
+        echo "install_ui_only.sh not found. Installing UI files directly..."
+        cd /usr/data
+        rm -rf tmp
+        mkdir -p tmp
+        
+        # Install Mainsail
+        echo "Cloning Mainsail..."
+        if git clone --depth=1 https://github.com/mainsail-crew/mainsail.git tmp/mainsail; then
+            rm -rf /usr/data/mainsail/*
+            cp -r tmp/mainsail/* /usr/data/mainsail/
+            echo "✓ Mainsail installed"
+        else
+            echo "✗ Failed to install Mainsail"
+        fi
+        
+        # Install Fluidd  
+        echo "Cloning Fluidd..."
+        if git clone --depth=1 https://github.com/fluidd-core/fluidd.git tmp/fluidd; then
+            rm -rf /usr/data/fluidd/*
+            cp -r tmp/fluidd/* /usr/data/fluidd/
+            echo "✓ Fluidd installed"
+        else
+            echo "✗ Failed to install Fluidd"
+        fi
+        
+        rm -rf tmp
+        
+        # Run the Nginx setup script
+        if [ -f "$SCRIPTS_DIR/setup_nginx.sh" ]; then
+            chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
+            $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
+        fi
+    fi
     
-    # Run the UI installer script
-    echo "Installing UI files..."
-    $SCRIPTS_DIR/install_ui_only.sh
-    
-    echo "Installation complete! UI files have been installed."
+    echo "Installation complete!"
     IP=$(ifconfig | grep -A1 eth0 | grep "inet addr" | cut -d: -f2 | awk '{print $1}')
     if [ -z "$IP" ]; then
         IP=$(ifconfig | grep -A1 wlan0 | grep "inet addr" | cut -d: -f2 | awk '{print $1}')

@@ -19,7 +19,7 @@ mkdir -p "${TEMP_CLONE}"
 mkdir -p "${MAINSAIL_DIR}"
 mkdir -p "${FLUIDD_DIR}"
 
-# Install Mainsail
+# Install Mainsail using git clone
 debug "Installing Mainsail UI..."
 rm -rf "${MAINSAIL_DIR}"/*
 cd "${TEMP_CLONE}"
@@ -42,7 +42,7 @@ else
     echo "✗ Failed to install Mainsail UI"
 fi
 
-# Install Fluidd
+# Install Fluidd using git clone  
 debug "Installing Fluidd UI..."
 rm -rf "${FLUIDD_DIR}"/*
 cd "${TEMP_CLONE}"

@@ -42,7 +42,7 @@ if [ ! -d "/opt" ] || [ ! -f "/opt/bin/opkg" ]; then
     
     # Download the Entware installer
     echo "Downloading Entware installer..."
-    wget http://bin.entware.net/mipselsf-k3.4/installer/generic.sh || exit_on_error "Failed to download Entware installer"
+    wget --no-check-certificate http://bin.entware.net/mipselsf-k3.4/installer/generic.sh || exit_on_error "Failed to download Entware installer"
     
     # Run the Entware installer
     echo "Running Entware installer..."
@@ -66,15 +66,16 @@ cd /usr/data/creality-k1-setup || exit_on_error "Failed to navigate to setup dir
 
 # Download main files
 echo "Downloading main installation files..."
-wget -O install.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/install.sh || exit_on_error "Failed to download install.sh"
-wget -O config.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/config.sh || exit_on_error "Failed to download config.sh"
+wget --no-check-certificate -O install.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/install.sh || exit_on_error "Failed to download install.sh"
+wget --no-check-certificate -O config.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/config.sh || exit_on_error "Failed to download config.sh"
 
 # Download script files
 echo "Downloading script files..."
 cd /usr/data/creality-k1-setup/scripts || exit_on_error "Failed to navigate to scripts directory"
-wget -O install_moonraker.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/scripts/install_moonraker.sh || exit_on_error "Failed to download install_moonraker.sh"
-wget -O setup_nginx.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/scripts/setup_nginx.sh || exit_on_error "Failed to download setup_nginx.sh"
-wget -O verify_packages.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/scripts/verify_packages.sh || exit_on_error "Failed to download verify_packages.sh"
+wget --no-check-certificate -O install_moonraker.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/scripts/install_moonraker.sh || exit_on_error "Failed to download install_moonraker.sh"
+wget --no-check-certificate -O setup_nginx.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/scripts/setup_nginx.sh || exit_on_error "Failed to download setup_nginx.sh"
+wget --no-check-certificate -O install_ui_only.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/scripts/install_ui_only.sh || exit_on_error "Failed to download install_ui_only.sh"
+wget --no-check-certificate -O verify_packages.sh https://raw.githubusercontent.com/Mariusjuvet1/creality-k1-setup/main/scripts/verify_packages.sh || exit_on_error "Failed to download verify_packages.sh"
 
 step "Setting executable permissions"
 chmod +x /usr/data/creality-k1-setup/install.sh || exit_on_error "Failed to set permissions on install.sh"
@@ -87,7 +88,7 @@ cd /usr/data/creality-k1-setup || exit_on_error "Failed to navigate to setup dir
 step "Installation complete!"
 echo "Mainsail and Fluidd have been installed on your Creality K1/K1-Max."
 echo "You can access them at:"
-echo "- Mainsail: http://your_printer_ip/mainsail"
-echo "- Fluidd: http://your_printer_ip/fluidd"
+echo "- Mainsail: http://your_printer_ip:4409"
+echo "- Fluidd: http://your_printer_ip:4408"
 echo ""
 echo "Thank you for using this installer."
