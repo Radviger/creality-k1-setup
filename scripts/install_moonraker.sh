@@ -312,6 +312,41 @@ http {
     sendfile on;
     keepalive_timeout 65;
 
+    # Serve Fluidd and Mainsail on port 80 with URL prefixes
+    server {
+        listen 80;
+        server_name _;
+
+        location /fluidd {
+            alias /usr/data/fluidd;
+            try_files $uri $uri/ /fluidd/index.html;
+        }
+
+        location /mainsail {
+            alias /usr/data/mainsail;
+            try_files $uri $uri/ /mainsail/index.html;
+        }
+
+        location /websocket {
+            proxy_pass http://127.0.0.1:7125/websocket;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/(printer|api|access|machine|server)/ {
+            proxy_pass http://127.0.0.1:7125;
+            proxy_http_version 1.1;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+
+    # Also serve Fluidd on its own port
     server {
         listen 4408;
         root /usr/data/fluidd;
@@ -343,6 +378,7 @@ http {
         }
     }
     
+    # Also serve Mainsail on its own port
     server {
         listen 4409;
         root /usr/data/mainsail;
@@ -375,4 +411,386 @@ http {
     }
     
     map $http_upgrade $connection_upgrade {
-        default upgrade
+        default upgrade;
+        '' close;
+    }
+}
+EOF
+
+    debug "Nginx config file created. First 10 lines:"
+    head -n 10 /opt/etc/nginx/nginx.conf
+    
+    # Verify structure is correct
+    if grep -q "^worker_processes" /opt/etc/nginx/nginx.conf && \
+       grep -q "^events {" /opt/etc/nginx/nginx.conf && \
+       grep -q "^http {" /opt/etc/nginx/nginx.conf; then
+        debug "Nginx config structure verification passed"
+    else
+        debug "WARNING: Nginx config structure verification failed!"
+        debug "Full nginx.conf contents:"
+        cat /opt/etc/nginx/nginx.conf
+    fi
+    
+    echo "Nginx configuration created"
+}
+
+# Create Moonraker service startup script
+create_moonraker_service() {
+    print_status "Creating Moonraker service script"
+    
+    debug "Creating start_moonraker.sh script"
+    cat > "${USR_DATA}/start_moonraker.sh" << 'EOF'
+#!/bin/sh
+
+# Kill any existing Moonraker process
+killall -q moonraker 2>/dev/null || true
+pkill -f "moonraker.py" 2>/dev/null || true
+sleep 1
+
+# Start Moonraker
+cd /usr/data/moonraker
+python3 /usr/data/moonraker/moonraker/moonraker.py -d /usr/data/printer_data > /usr/data/printer_data/logs/moonraker.log 2>&1 &
+
+echo "Moonraker started!"
+EOF
+
+    chmod +x "${USR_DATA}/start_moonraker.sh"
+    debug "start_moonraker.sh contents:"
+    cat "${USR_DATA}/start_moonraker.sh"
+    
+    echo "Moonraker service script created at ${USR_DATA}/start_moonraker.sh"
+}
+
+# Install UI files - UPDATED
+install_ui_files() {
+    print_status "Installing UI files from repository"
+    
+    # Check if prepackaged UI files exist in repository
+    REPO_DIR="/usr/data/creality-k1-setup"
+    
+    if [ -d "${REPO_DIR}/prepackaged/mainsail" ] && [ "$(ls -A ${REPO_DIR}/prepackaged/mainsail 2>/dev/null)" ]; then
+        debug "Found prepackaged Mainsail UI files in repository"
+        cp -R "${REPO_DIR}/prepackaged/mainsail/"* "${MAINSAIL_DIR}/"
+        debug "Copied Mainsail UI files to ${MAINSAIL_DIR}"
+    else
+        debug "No prepackaged Mainsail UI files found in repository"
+        create_minimal_ui "mainsail"
+    fi
+    
+    if [ -d "${REPO_DIR}/prepackaged/fluidd" ] && [ "$(ls -A ${REPO_DIR}/prepackaged/fluidd 2>/dev/null)" ]; then
+        debug "Found prepackaged Fluidd UI files in repository"
+        cp -R "${REPO_DIR}/prepackaged/fluidd/"* "${FLUIDD_DIR}/"
+        debug "Copied Fluidd UI files to ${FLUIDD_DIR}"
+    else
+        debug "No prepackaged Fluidd UI files found in repository"
+        create_minimal_ui "fluidd"
+    fi
+}
+
+# Create minimal UI files - UPDATED
+create_minimal_ui() {
+    UI_TYPE="$1"
+    
+    if [ "$UI_TYPE" = "mainsail" ]; then
+        print_status "Creating minimal Mainsail UI"
+        
+        # Create minimal Mainsail placeholder 
+        cat > "${MAINSAIL_DIR}/index.html" << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mainsail - Please Download UI</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 50px; }
+        h1 { color: #E76F51; }
+        p { margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>Mainsail UI Not Installed</h1>
+    <p>Please run the download script to install the Mainsail UI:</p>
+    <p><code>/usr/data/download_ui.sh</code></p>
+    <p>Or select option 2 from the menu.</p>
+</body>
+</html>
+EOF
+        debug "Created minimal Mainsail placeholder"
+        
+    elif [ "$UI_TYPE" = "fluidd" ]; then
+        print_status "Creating minimal Fluidd UI"
+        
+        # Create minimal Fluidd placeholder
+        cat > "${FLUIDD_DIR}/index.html" << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fluidd - Please Download UI</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 50px; }
+        h1 { color: #0078D7; }
+        p { margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>Fluidd UI Not Installed</h1>
+    <p>Please run the download script to install the Fluidd UI:</p>
+    <p><code>/usr/data/download_ui.sh</code></p>
+    <p>Or select option 1 from the menu.</p>
+</body>
+</html>
+EOF
+        debug "Created minimal Fluidd placeholder"
+    fi
+}
+
+# Create UI download script for later use
+create_download_script() {
+    print_status "Creating UI download script for later use"
+    
+    debug "Creating download_ui.sh script"
+    cat > "${USR_DATA}/download_ui.sh" << 'EOF'
+#!/bin/sh
+
+# Download Fluidd and Mainsail UIs for Creality K1
+
+# Function to log messages
+log() {
+    echo "$(date +%H:%M:%S) - $1"
+}
+
+# Function to download UI using multiple methods
+download_ui() {
+    UI_NAME="$1"
+    UI_DIR="$2"
+    RELEASE_URL="$3"
+    
+    log "Downloading ${UI_NAME}..."
+    cd /usr/data
+    
+    # Try wget first
+    log "Trying wget method..."
+    wget --no-check-certificate -O ${UI_NAME,,}.zip "$RELEASE_URL"
+    if [ $? -eq 0 ]; then
+        log "Extracting ${UI_NAME}..."
+        rm -rf "${UI_DIR}"/*
+        unzip -o ${UI_NAME,,}.zip -d "${UI_DIR}"
+        rm ${UI_NAME,,}.zip
+        log "${UI_NAME} installed successfully!"
+        return 0
+    fi
+    
+    # Try curl as second option
+    log "Trying curl method..."
+    curl -L -k -o ${UI_NAME,,}.zip "$RELEASE_URL"
+    if [ $? -eq 0 ]; then
+        log "Extracting ${UI_NAME}..."
+        rm -rf "${UI_DIR}"/*
+        unzip -o ${UI_NAME,,}.zip -d "${UI_DIR}"
+        rm ${UI_NAME,,}.zip
+        log "${UI_NAME} installed successfully!"
+        return 0
+    fi
+    
+    log "All download methods failed for ${UI_NAME}."
+    return 1
+}
+
+# Main menu
+show_menu() {
+    echo "===================================================================="
+    echo "                   UI Download for Creality K1                      "
+    echo "===================================================================="
+    echo ""
+    echo "Which UI would you like to download?"
+    echo "1) Fluidd (port 4408)"
+    echo "2) Mainsail (port 4409)"
+    echo "3) Both UIs"
+    echo "4) Quit"
+    echo ""
+    read -p "Enter your choice (1-4): " choice
+    
+    case "$choice" in
+        1) download_fluidd ;;
+        2) download_mainsail ;;
+        3) download_fluidd && download_mainsail ;;
+        4) echo "Exiting without downloading." ;;
+        *) echo "Invalid choice." ;;
+    esac
+    
+    # Restart Nginx to apply changes
+    echo "Restarting Nginx..."
+    killall nginx 2>/dev/null || true
+    /opt/sbin/nginx
+}
+
+# Download Fluidd
+download_fluidd() {
+    download_ui "Fluidd" "/usr/data/fluidd" "https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip"
+}
+
+# Download Mainsail
+download_mainsail() {
+    download_ui "Mainsail" "/usr/data/mainsail" "https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip"
+}
+
+# Execute main menu if run directly
+if [ "$0" = "/usr/data/download_ui.sh" ]; then
+    show_menu
+fi
+EOF
+
+    chmod +x "${USR_DATA}/download_ui.sh"
+    debug "download_ui.sh contents (first 10 lines):"
+    head -n 10 "${USR_DATA}/download_ui.sh"
+    
+    echo "Download script created at ${USR_DATA}/download_ui.sh"
+}
+
+# Start Moonraker
+start_moonraker() {
+    print_status "Starting Moonraker"
+    
+    debug "Checking if Moonraker is already running"
+    if check_process "python3.*moonraker.py"; then
+        debug "Moonraker is already running, stopping it first"
+        kill_process "python3.*moonraker.py"
+    fi
+    
+    debug "Starting Moonraker with start_moonraker.sh"
+    "${USR_DATA}/start_moonraker.sh"
+    
+    # Check if Moonraker started
+    sleep 2
+    if check_process "python3.*moonraker.py"; then
+        debug "Moonraker process is running"
+        echo "Moonraker started successfully!"
+    else
+        debug "Moonraker process is NOT running after start attempt"
+        debug "Checking Moonraker log:"
+        tail -n 20 "${LOGS_DIR}/moonraker.log" || debug "Could not read Moonraker log"
+        echo "Warning: Moonraker may not have started properly. Check logs at ${LOGS_DIR}/moonraker.log"
+    fi
+}
+
+# Start Nginx
+start_nginx() {
+    print_status "Starting Nginx"
+    
+    # Kill any existing Nginx process
+    debug "Stopping Nginx if it's already running"
+    kill_process "nginx"
+    
+    # Start Nginx
+    debug "Starting Nginx"
+    /opt/sbin/nginx
+    
+    # Check if Nginx started
+    sleep 1
+    if check_process "nginx"; then
+        debug "Nginx process is running"
+        echo "Nginx started successfully!"
+    else
+        debug "Nginx is NOT running after start attempt"
+        debug "Checking Nginx error log:"
+        tail -n 20 /opt/var/log/nginx/error.log 2>/dev/null || debug "Could not read Nginx error log"
+        
+        # Check for specific error conditions
+        debug "Testing Nginx configuration file"
+        /opt/sbin/nginx -t
+        
+        echo "Warning: Nginx may not have started properly."
+        return 1
+    fi
+}
+
+# Check installation
+verify_installation() {
+    print_status "Verifying installation"
+    
+    local errors=0
+    
+    # Check Moonraker
+    debug "Checking if Moonraker is running"
+    if check_process "python3.*moonraker.py"; then
+        echo "✓ Moonraker is running"
+    else
+        echo "✗ Moonraker is NOT running"
+        errors=$((errors + 1))
+    fi
+    
+    # Check Nginx
+    debug "Checking if Nginx is running"
+    if check_process "nginx"; then
+        echo "✓ Nginx is running"
+    else
+        echo "✗ Nginx is NOT running"
+        errors=$((errors + 1))
+    fi
+    
+    # Check UI files
+    if [ -f "${MAINSAIL_DIR}/index.html" ]; then
+        echo "✓ Mainsail UI files are installed"
+    else
+        echo "✗ Mainsail UI files are NOT installed"
+        errors=$((errors + 1))
+    fi
+    
+    if [ -f "${FLUIDD_DIR}/index.html" ]; then
+        echo "✓ Fluidd UI files are installed"
+    else
+        echo "✗ Fluidd UI files are NOT installed"
+        errors=$((errors + 1))
+    fi
+    
+    # Report status
+    if [ $errors -eq 0 ]; then
+        echo "✓ Installation verification passed!"
+        return 0
+    else
+        echo "✗ Installation verification failed with $errors errors"
+        return 1
+    fi
+}
+
+# Main execution
+main() {
+    print_status "Starting installation of Moonraker, Nginx, and UI files for Creality K1"
+    
+    # Run all installation steps
+    cleanup
+    install_moonraker
+    setup_venv
+    create_moonraker_config
+    create_nginx_config
+    create_moonraker_service
+    install_ui_files
+    create_download_script
+    
+    # Start services
+    start_moonraker
+    start_nginx
+    
+    # Verify installation
+    verify_installation
+    
+    # Print completion message
+    print_status "Installation complete!"
+    echo ""
+    echo "Moonraker is running on port 7125"
+    echo "UI interfaces are installed and ready to use:"
+    echo "  • Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
+    echo "  • Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
+    echo ""
+    echo "For full UI functionality (if not already installed), run: /usr/data/download_ui.sh"
+    echo "If you need to restart Moonraker: /usr/data/start_moonraker.sh"
+    echo ""
+    echo "Note: The official Creality warning states that running Moonraker"
+    echo "for extended periods may cause memory issues on the K1 series."
+    echo ""
+    echo "Installation log saved to: ${SCRIPT_LOG}"
+    echo ""
+    echo "Enjoy!"
+}
+
+# Execute main function
+main

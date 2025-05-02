@@ -69,14 +69,19 @@ EOF
 chown root:root /opt/etc/sudoers
 chmod 440 /opt/etc/sudoers
 
+
 # Check if Moonraker is already running
 if ps aux | grep '[m]oonraker' > /dev/null; then
     echo "Moonraker is already running. Configuring Fluidd and Mainsail with the existing Moonraker service."
 
+    # Make sure directories exist for UI files
+    mkdir -p /usr/data/fluidd
+    mkdir -p /usr/data/mainsail
+
     # Ensure scripts are executable
     chmod +x "$SCRIPTS_DIR/setup_nginx.sh"
 
-    # Trigger Nginx setup script
+    # Run the Nginx setup script directly
     $SCRIPTS_DIR/setup_nginx.sh || exit_on_error "Failed to configure Nginx"
     exit 0
 fi
