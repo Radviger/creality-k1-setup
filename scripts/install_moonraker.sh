@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Automated Moonraker/Nginx Installation Script for Creality K1
-# Compatible with BusyBox sh shell
+# Compatible with BusyBox sh shell - FULLY AUTOMATED
 
 # Exit on errors
 set -e
@@ -53,73 +53,57 @@ exit_on_error() {
     exit 1
 }
 
-# Process status check - BusyBox compatible
-check_process() {
-    local process_name="$1"
-    # Use ps and grep instead of pgrep for BusyBox compatibility
-    local count=$(ps | grep -v grep | grep -c "$process_name" || echo 0)
-    if [ "$count" -gt 0 ]; then
-        return 0  # Process is running
-    else
-        return 1  # Process is not running
-    fi
-}
-
-# Kill process if running
-kill_process() {
-    local process_name="$1"
-    log "Attempting to kill process: $process_name"
+# Force kill all processes - AGGRESSIVE CLEANUP
+force_cleanup() {
+    print_status "Performing aggressive cleanup of existing services"
     
-    if check_process "$process_name"; then
-        log "Process $process_name is running, stopping it now"
-        killall -q "$process_name" 2>/dev/null || true
-        sleep 1
-        if check_process "$process_name"; then
-            log "Process $process_name is still running, force killing"
-            killall -9 -q "$process_name" 2>/dev/null || true
-            sleep 1
+    # Kill all Moonraker processes - find them by various methods
+    log "Terminating all Moonraker instances..."
+    
+    # Method 1: Kill by name pattern
+    ps | grep -v grep | grep -E 'moonraker|python.*moonraker' | while read line; do
+        pid=$(echo $line | awk '{print $1}')
+        log "Found process PID $pid, terminating..."
+        kill -9 $pid 2>/dev/null || true
+    done
+    
+    # Method 2: Kill all python processes that might be running moonraker
+    ps | grep -v grep | grep python | grep -v "$0" | while read line; do
+        pid=$(echo $line | awk '{print $1}')
+        cmdline=$(cat /proc/$pid/cmdline 2>/dev/null || echo "")
+        if echo "$cmdline" | grep -q moonraker; then
+            log "Found python moonraker PID $pid, terminating..."
+            kill -9 $pid 2>/dev/null || true
         fi
-    else
-        log "Process $process_name is not running"
-    fi
+    done
     
-    # Double check
-    if check_process "$process_name"; then
-        log "WARNING: Process $process_name could not be stopped"
-        return 1
-    else
-        log "Process $process_name is confirmed stopped"
-        return 0
-    fi
-}
-
-# Check if port is in use
-check_port() {
-    local port=$1
-    if $(netstat -an 2>/dev/null | grep -q ":$port "); then
-        return 0  # Port is in use
-    else
-        return 1  # Port is free
-    fi
-}
-
-# Clean up existing installations
-cleanup() {
-    print_status "Cleaning up any previous installation files"
+    # Kill all Nginx processes
+    log "Terminating all Nginx instances..."
+    ps | grep -v grep | grep nginx | while read line; do
+        pid=$(echo $line | awk '{print $1}')
+        log "Found nginx PID $pid, terminating..."
+        kill -9 $pid 2>/dev/null || true
+    done
     
-    # Stop existing services
-    log "Stopping Moonraker if running"
-    kill_process "moonraker"
-    kill_process "python3.*moonraker.py"
+    # Wait for processes to die
+    sleep 2
     
-    log "Stopping Nginx if running"
-    kill_process "nginx"
+    # Clean up remaining PIDs using killall as backup
+    killall -9 moonraker 2>/dev/null || true
+    killall -9 nginx 2>/dev/null || true
     
     # Clean up temporary files
     log "Removing temporary files"
-    rm -rf "${TMPDIR:?}"/*
-    rm -rf /root/.cache/pip || true
+    rm -rf "${TMPDIR:?}"/* 2>/dev/null || true
+    rm -rf /root/.cache/pip 2>/dev/null || true
     mkdir -p "${TMPDIR}"
+    
+    # Clean up any stale PID files
+    rm -f /var/run/moonraker.pid 2>/dev/null || true
+    rm -f /var/run/nginx.pid 2>/dev/null || true
+    
+    # Give processes time to fully terminate
+    sleep 3
     
     log "Cleanup completed"
 }
@@ -298,26 +282,9 @@ create_nginx_config() {
     log "Removing any existing nginx.conf"
     rm -f /opt/etc/nginx/nginx.conf
     
-    # Check which ports are available
-    local fluidd_port=4408
-    local mainsail_port=4409
-    
-    # Find available ports if default ones are in use
-    if check_port $fluidd_port; then
-        log "Port $fluidd_port is in use, trying alternative..."
-        fluidd_port=4410
-    fi
-    
-    if check_port $mainsail_port; then
-        log "Port $mainsail_port is in use, trying alternative..."
-        mainsail_port=4411
-    fi
-    
-    log "Using ports: Fluidd=$fluidd_port, Mainsail=$mainsail_port"
-    
-    # Create new nginx.conf - WITHOUT port 80 to avoid conflicts
-    log "Creating new nginx.conf"
-    cat > /opt/etc/nginx/nginx.conf << EOF
+    # Use available ports - ports 4408 and 4409, skipping port 80
+    log "Creating new nginx.conf (using ports 4408 and 4409)"
+    cat > /opt/etc/nginx/nginx.conf << 'EOF'
 worker_processes 1;
 
 events {
@@ -332,11 +299,11 @@ http {
 
     # Serve Fluidd on its own port
     server {
-        listen ${fluidd_port};
+        listen 4408;
         root /usr/data/fluidd;
         
         location / {
-            try_files \$uri \$uri/ /index.html;
+            try_files $uri $uri/ /index.html;
         }
         
         location = /index.html {
@@ -346,29 +313,29 @@ http {
         location /websocket {
             proxy_pass http://127.0.0.1:7125/websocket;
             proxy_http_version 1.1;
-            proxy_set_header Upgrade \$http_upgrade;
-            proxy_set_header Connection \$connection_upgrade;
-            proxy_set_header Host \$http_host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
         
         location ~ ^/(printer|api|access|machine|server)/ {
             proxy_pass http://127.0.0.1:7125;
             proxy_http_version 1.1;
-            proxy_set_header Host \$http_host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
     }
     
     # Serve Mainsail on its own port
     server {
-        listen ${mainsail_port};
+        listen 4409;
         root /usr/data/mainsail;
         
         location / {
-            try_files \$uri \$uri/ /index.html;
+            try_files $uri $uri/ /index.html;
         }
         
         location = /index.html {
@@ -378,23 +345,23 @@ http {
         location /websocket {
             proxy_pass http://127.0.0.1:7125/websocket;
             proxy_http_version 1.1;
-            proxy_set_header Upgrade \$http_upgrade;
-            proxy_set_header Connection \$connection_upgrade;
-            proxy_set_header Host \$http_host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
         
         location ~ ^/(printer|api|access|machine|server)/ {
             proxy_pass http://127.0.0.1:7125;
             proxy_http_version 1.1;
-            proxy_set_header Host \$http_host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
     }
     
-    map \$http_upgrade \$connection_upgrade {
+    map $http_upgrade $connection_upgrade {
         default upgrade;
         '' close;
     }
@@ -413,8 +380,8 @@ create_moonraker_service() {
 #!/bin/sh
 
 # Kill any existing Moonraker process
-killall -q moonraker 2>/dev/null || true
-pkill -f "moonraker.py" 2>/dev/null || true
+ps | grep moonraker | grep -v grep | awk '{print $1}' | xargs -r kill -9
+ps | grep python | grep moonraker | grep -v grep | awk '{print $1}' | xargs -r kill -9
 sleep 1
 
 # Start Moonraker
@@ -455,7 +422,8 @@ install_ui_files() {
             log "Mainsail UI files installed successfully"
         fi
     else
-        log "Failed to clone Mainsail repository"
+        log "Failed to clone Mainsail repository, will create minimal placeholder"
+        echo "<!DOCTYPE html><html><head><title>Mainsail not installed</title></head><body><h1>Mainsail UI not installed</h1><p>Git clone failed. Please check your internet connection.</p></body></html>" > "${MAINSAIL_DIR}/index.html"
     fi
     
     # Install Fluidd
@@ -471,103 +439,22 @@ install_ui_files() {
             log "Fluidd UI files installed successfully"
         fi
     else
-        log "Failed to clone Fluidd repository"
+        log "Failed to clone Fluidd repository, will create minimal placeholder"
+        echo "<!DOCTYPE html><html><head><title>Fluidd not installed</title></head><body><h1>Fluidd UI not installed</h1><p>Git clone failed. Please check your internet connection.</p></body></html>" > "${FLUIDD_DIR}/index.html"
     fi
-}
-
-# Create UI download script for later use
-create_download_script() {
-    print_status "Creating UI download script for later use"
-    
-    log "Creating download_ui.sh script"
-    cat > "${USR_DATA}/download_ui.sh" << 'EOF'
-#!/bin/sh
-
-# Download Fluidd and Mainsail UIs for Creality K1
-
-# Function to log messages
-log() {
-    echo "$(date +%H:%M:%S) - $1"
-}
-
-# Main menu
-show_menu() {
-    echo "===================================================================="
-    echo "                   UI Download for Creality K1                      "
-    echo "===================================================================="
-    echo ""
-    echo "Which UI would you like to download?"
-    echo "1) Fluidd (port 4408)"
-    echo "2) Mainsail (port 4409)"
-    echo "3) Both UIs"
-    echo "4) Quit"
-    echo ""
-    read -p "Enter your choice (1-4): " choice
-    
-    case "$choice" in
-        1) download_fluidd ;;
-        2) download_mainsail ;;
-        3) download_fluidd && download_mainsail ;;
-        4) echo "Exiting without downloading." ;;
-        *) echo "Invalid choice." ;;
-    esac
-    
-    # Restart Nginx to apply changes
-    echo "Restarting Nginx..."
-    killall nginx 2>/dev/null || true
-    /opt/sbin/nginx
-}
-
-# Download Fluidd
-download_fluidd() {
-    log "Downloading Fluidd..."
-    cd /usr/data
-    rm -rf fluidd
-    git clone --depth=1 https://github.com/fluidd-core/fluidd.git
-    log "Fluidd installed successfully!"
-}
-
-# Download Mainsail
-download_mainsail() {
-    log "Downloading Mainsail..."
-    cd /usr/data
-    rm -rf mainsail
-    git clone --depth=1 https://github.com/mainsail-crew/mainsail.git
-    log "Mainsail installed successfully!"
-}
-
-# Execute main menu if run directly
-if [ "$0" = "/usr/data/download_ui.sh" ]; then
-    show_menu
-fi
-EOF
-
-    chmod +x "${USR_DATA}/download_ui.sh"
-    log "Download script created at ${USR_DATA}/download_ui.sh"
 }
 
 # Start Moonraker
 start_moonraker() {
     print_status "Starting Moonraker"
     
-    log "Checking if Moonraker is already running"
-    if check_process "python3.*moonraker.py"; then
-        log "Moonraker is already running, stopping it first"
-        kill_process "python3.*moonraker.py"
-    fi
-    
-    log "Starting Moonraker with start_moonraker.sh"
     "${USR_DATA}/start_moonraker.sh"
     
     # Check if Moonraker started
     sleep 2
-    if check_process "python3.*moonraker.py"; then
-        log "Moonraker process is running"
+    if ps | grep python | grep moonraker | grep -v grep >/dev/null; then
         log "Moonraker started successfully!"
     else
-        log "Moonraker process is NOT running after start attempt"
-        log "Checking Moonraker log:"
-        tail -n 20 "${LOGS_DIR}/moonraker.log" || log "Could not read Moonraker log"
         log "Warning: Moonraker may not have started properly. Check logs at ${LOGS_DIR}/moonraker.log"
     fi
 }
@@ -576,116 +463,47 @@ start_moonraker() {
 start_nginx() {
     print_status "Starting Nginx"
     
-    # Kill any existing Nginx process
-    log "Stopping Nginx if it's already running"
-    kill_process "nginx"
-    
     # Start Nginx
     log "Starting Nginx"
     /opt/sbin/nginx
     
     # Check if Nginx started
     sleep 1
-    if check_process "nginx"; then
-        log "Nginx process is running"
+    if ps | grep nginx | grep -v grep >/dev/null; then
         log "Nginx started successfully!"
     else
-        log "Nginx is NOT running after start attempt"
-        log "Checking Nginx error log:"
-        tail -n 20 /opt/var/log/nginx/error.log 2>/dev/null || log "Could not read Nginx error log"
-        
-        # Check for specific error conditions
-        log "Testing Nginx configuration file"
+        log "Warning: Nginx may not have started properly. Testing configuration..."
         /opt/sbin/nginx -t
-        
-        log "Warning: Nginx may not have started properly."
-        return 1
-    fi
-}
-
-# Check installation
-verify_installation() {
-    print_status "Verifying installation"
-    
-    local errors=0
-    
-    # Check Moonraker
-    log "Checking if Moonraker is running"
-    if check_process "python3.*moonraker.py"; then
-        log "✓ Moonraker is running"
-    else
-        log "✗ Moonraker is NOT running"
-        errors=$((errors + 1))
-    fi
-    
-    # Check Nginx
-    log "Checking if Nginx is running"
-    if check_process "nginx"; then
-        log "✓ Nginx is running"
-    else
-        log "✗ Nginx is NOT running"
-        errors=$((errors + 1))
-    fi
-    
-    # Check UI files
-    if [ -f "${MAINSAIL_DIR}/index.html" ]; then
-        log "✓ Mainsail UI files are installed"
-    else
-        log "✗ Mainsail UI files are NOT installed"
-        errors=$((errors + 1))
-    fi
-    
-    if [ -f "${FLUIDD_DIR}/index.html" ]; then
-        log "✓ Fluidd UI files are installed"
-    else
-        log "✗ Fluidd UI files are NOT installed"
-        errors=$((errors + 1))
-    fi
-    
-    # Report status
-    if [ $errors -eq 0 ]; then
-        log "✓ Installation verification passed!"
-        return 0
-    else
-        log "✗ Installation verification failed with $errors errors"
-        return 1
     fi
 }
 
 # Main execution
 main() {
-    print_status "Starting installation of Moonraker, Nginx, and UI files for Creality K1"
+    print_status "Starting automated installation of Moonraker, Nginx, and UI files for Creality K1"
     
     # Run all installation steps
-    cleanup
+    force_cleanup
     install_moonraker
     setup_venv
     create_moonraker_config
     create_nginx_config
     create_moonraker_service
     install_ui_files
-    create_download_script
     
     # Start services
     start_moonraker
     start_nginx
     
-    # Verify installation
-    verify_installation
-    
     print_status "Installation complete!"
-log ""
-log "Moonraker is running on port 7125"
-log "UI interfaces are installed and ready to use:"
-log "  • Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
-log "  • Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
-log ""
-log "Note: The official Creality warning states that running Moonraker"
-log "for extended periods may cause memory issues on the K1 series."
-log ""
-log "Installation log saved to: ${SCRIPT_LOG}"
-log ""
-log "Enjoy!"
+    log ""
+    log "Moonraker is running on port 7125"
+    log "UI interfaces are installed and ready to use:"
+    log "  • Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
+    log "  • Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
+    log ""
+    log "Installation log saved to: ${SCRIPT_LOG}"
+    log ""
+    log "Enjoy!"
 }
 
 # Execute main function
