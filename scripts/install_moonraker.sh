@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Automated Moonraker/Nginx Installation Script for Creality K1
-# Enhanced with debugging and process verification
+# Compatible with BusyBox sh shell
 
 # Exit on errors
 set -e
@@ -17,10 +17,14 @@ MAINSAIL_DIR="${USR_DATA}/mainsail"
 TMPDIR="${USR_DATA}/tmp"
 SCRIPT_LOG="${USR_DATA}/moonraker_install.log"
 
-# Start logging
-exec > >(tee -a "${SCRIPT_LOG}") 2>&1
-echo "Starting installation script at $(date)"
-echo "--------------------------------------------------------------------------"
+# Create log file
+echo "Starting installation script at $(date)" > "${SCRIPT_LOG}"
+echo "--------------------------------------------------------------------------" >> "${SCRIPT_LOG}"
+
+# Function to log and print
+log() {
+    echo "$@" | tee -a "${SCRIPT_LOG}"
+}
 
 # Create directories
 mkdir -p "${TMPDIR}"
@@ -37,20 +41,15 @@ export PATH=$PATH:/opt/bin:/opt/sbin
 
 # Print status message
 print_status() {
-    echo "==========================================================================="
-    echo "$(date +%H:%M:%S) - $1"
-    echo "==========================================================================="
-}
-
-# Debug message
-debug() {
-    echo "[DEBUG $(date +%H:%M:%S)] $1"
+    log "==========================================================================="
+    log "$(date +%H:%M:%S) - $1"
+    log "==========================================================================="
 }
 
 # Exit on error
 exit_on_error() {
-    echo "ERROR: $1"
-    echo "Check log at ${SCRIPT_LOG} for details"
+    log "ERROR: $1"
+    log "Check log at ${SCRIPT_LOG} for details"
     exit 1
 }
 
@@ -58,7 +57,6 @@ exit_on_error() {
 check_process() {
     local process_name="$1"
     local count=$(pgrep -fc "$process_name" || echo 0)
-    debug "Process '$process_name' count: $count"
     if [ "$count" -gt 0 ]; then
         return 0  # Process is running
     else
@@ -69,27 +67,27 @@ check_process() {
 # Kill process if running
 kill_process() {
     local process_name="$1"
-    debug "Attempting to kill process: $process_name"
+    log "Attempting to kill process: $process_name"
     
     if check_process "$process_name"; then
-        debug "Process $process_name is running, stopping it now"
+        log "Process $process_name is running, stopping it now"
         killall -q "$process_name" 2>/dev/null || true
         sleep 1
         if check_process "$process_name"; then
-            debug "Process $process_name is still running, force killing"
+            log "Process $process_name is still running, force killing"
             killall -9 -q "$process_name" 2>/dev/null || true
             sleep 1
         fi
     else
-        debug "Process $process_name is not running"
+        log "Process $process_name is not running"
     fi
     
     # Double check
     if check_process "$process_name"; then
-        debug "WARNING: Process $process_name could not be stopped"
+        log "WARNING: Process $process_name could not be stopped"
         return 1
     else
-        debug "Process $process_name is confirmed stopped"
+        log "Process $process_name is confirmed stopped"
         return 0
     fi
 }
@@ -99,20 +97,20 @@ cleanup() {
     print_status "Cleaning up any previous installation files"
     
     # Stop existing services
-    debug "Stopping Moonraker if running"
+    log "Stopping Moonraker if running"
     kill_process "moonraker"
     kill_process "python3.*moonraker.py"
     
-    debug "Stopping Nginx if running"
+    log "Stopping Nginx if running"
     kill_process "nginx"
     
     # Clean up temporary files
-    debug "Removing temporary files"
+    log "Removing temporary files"
     rm -rf "${TMPDIR:?}"/*
     rm -rf /root/.cache/pip || true
     mkdir -p "${TMPDIR}"
     
-    debug "Cleanup completed"
+    log "Cleanup completed"
 }
 
 # Install Moonraker
@@ -121,27 +119,23 @@ install_moonraker() {
     
     # Check if Moonraker directory exists and remove if necessary
     if [ -d "${MOONRAKER_DIR}" ]; then
-        debug "Moonraker directory already exists. Deleting..."
+        log "Moonraker directory already exists. Deleting..."
         rm -rf "${MOONRAKER_DIR}" || exit_on_error "Failed to delete ${MOONRAKER_DIR}"
     fi
     
     # Create directory and clone repository
-    debug "Creating Moonraker directory and cloning repository"
+    log "Creating Moonraker directory and cloning repository"
     mkdir -p "${MOONRAKER_DIR}" || exit_on_error "Failed to create ${MOONRAKER_DIR}"
     cd "${USR_DATA}" || exit_on_error "Failed to change directory to ${USR_DATA}"
     
     # Clone with --depth=1 to minimize disk usage
-    debug "Cloning Moonraker repository"
+    log "Cloning Moonraker repository"
     git clone --depth=1 https://github.com/Arksine/moonraker.git "${MOONRAKER_DIR}" || exit_on_error "Failed to clone Moonraker"
     
-    echo "Moonraker installed successfully"
+    log "Moonraker installed successfully"
     
     # Fix dbus_manager.py to avoid dependency issues
     print_status "Fixing dbus_manager.py to avoid dependency issues"
-    debug "Original dbus_manager.py contents (first 10 lines):"
-    head -n 10 "${MOONRAKER_DIR}/moonraker/components/dbus_manager.py" || debug "Could not read dbus_manager.py"
-    
-    debug "Writing new dbus_manager.py"
     cat > "${MOONRAKER_DIR}/moonraker/components/dbus_manager.py" << 'EOF'
 # Modified dbus_manager.py for Creality K1
 class DbusManager:
@@ -153,9 +147,7 @@ def load_component(config):
     return DbusManager(config)
 EOF
 
-    debug "New dbus_manager.py contents:"
-    cat "${MOONRAKER_DIR}/moonraker/components/dbus_manager.py"
-    echo "dbus_manager.py fixed successfully"
+    log "dbus_manager.py fixed successfully"
 }
 
 # Set up Python virtual environment
@@ -164,14 +156,14 @@ setup_venv() {
     
     # Remove existing virtual environment if it exists
     if [ -d "${VENV_DIR}" ]; then
-        debug "Removing existing virtual environment..."
+        log "Removing existing virtual environment..."
         rm -rf "${VENV_DIR}"
     fi
     
     # Create virtual environment using system packages to save space
-    debug "Creating virtual environment with system packages..."
+    log "Creating virtual environment with system packages..."
     python3 -m venv --system-site-packages "${VENV_DIR}" || {
-        debug "Failed to create virtual environment with venv module. Creating minimal environment..."
+        log "Failed to create virtual environment with venv module. Creating minimal environment..."
         
         # Create directory structure
         mkdir -p "${VENV_DIR}/bin"
@@ -205,17 +197,17 @@ EOF
     }
     
     # Install minimal dependencies
-    debug "Installing minimal Python dependencies..."
-    pip3 install tornado==6.1 pyserial pillow --no-cache-dir || debug "Warning: Some dependencies failed to install, but we'll continue anyway"
+    log "Installing minimal Python dependencies..."
+    pip3 install tornado==6.1 pyserial pillow --no-cache-dir || log "Warning: Some dependencies failed to install, but we'll continue anyway"
     
-    echo "Python virtual environment set up successfully"
+    log "Python virtual environment set up successfully"
 }
 
 # Create Moonraker configuration
 create_moonraker_config() {
     print_status "Creating Moonraker configuration"
     
-    debug "Writing moonraker.conf to ${CONFIG_DIR}/moonraker.conf"
+    log "Writing moonraker.conf to ${CONFIG_DIR}/moonraker.conf"
     cat > "${CONFIG_DIR}/moonraker.conf" << 'EOF'
 [server]
 host: 0.0.0.0
@@ -281,9 +273,7 @@ repo: fluidd-core/fluidd
 path: /usr/data/fluidd
 EOF
 
-    debug "Moonraker config file contents (first 10 lines):"
-    head -n 10 "${CONFIG_DIR}/moonraker.conf"
-    echo "Moonraker configuration created"
+    log "Moonraker configuration created"
 }
 
 # Create Nginx configuration with proper structure
@@ -294,11 +284,11 @@ create_nginx_config() {
     mkdir -p /opt/etc/nginx
     
     # Remove any existing nginx.conf
-    debug "Removing any existing nginx.conf"
+    log "Removing any existing nginx.conf"
     rm -f /opt/etc/nginx/nginx.conf
     
     # Create new nginx.conf
-    debug "Creating new nginx.conf"
+    log "Creating new nginx.conf"
     cat > /opt/etc/nginx/nginx.conf << 'EOF'
 worker_processes 1;
 
@@ -417,28 +407,14 @@ http {
 }
 EOF
 
-    debug "Nginx config file created. First 10 lines:"
-    head -n 10 /opt/etc/nginx/nginx.conf
-    
-    # Verify structure is correct
-    if grep -q "^worker_processes" /opt/etc/nginx/nginx.conf && \
-       grep -q "^events {" /opt/etc/nginx/nginx.conf && \
-       grep -q "^http {" /opt/etc/nginx/nginx.conf; then
-        debug "Nginx config structure verification passed"
-    else
-        debug "WARNING: Nginx config structure verification failed!"
-        debug "Full nginx.conf contents:"
-        cat /opt/etc/nginx/nginx.conf
-    fi
-    
-    echo "Nginx configuration created"
+    log "Nginx configuration created"
 }
 
 # Create Moonraker service startup script
 create_moonraker_service() {
     print_status "Creating Moonraker service script"
     
-    debug "Creating start_moonraker.sh script"
+    log "Creating start_moonraker.sh script"
     cat > "${USR_DATA}/start_moonraker.sh" << 'EOF'
 #!/bin/sh
 
@@ -455,10 +431,7 @@ echo "Moonraker started!"
 EOF
 
     chmod +x "${USR_DATA}/start_moonraker.sh"
-    debug "start_moonraker.sh contents:"
-    cat "${USR_DATA}/start_moonraker.sh"
-    
-    echo "Moonraker service script created at ${USR_DATA}/start_moonraker.sh"
+    log "Moonraker service script created at ${USR_DATA}/start_moonraker.sh"
 }
 
 # Install UI files - USE GIT CLONE 
@@ -470,10 +443,10 @@ install_ui_files() {
     mkdir -p "${TEMP_CLONE}"
     
     # Install Mainsail
-    debug "Installing Mainsail UI..."
+    log "Installing Mainsail UI..."
     rm -rf "${MAINSAIL_DIR}"/*
     cd "${TEMP_CLONE}"
-    debug "Cloning Mainsail repository..."
+    log "Cloning Mainsail repository..."
     
     if git clone --depth=1 https://github.com/mainsail-crew/mainsail.git; then
         if [ -d "${TEMP_CLONE}/mainsail" ]; then
@@ -485,27 +458,27 @@ install_ui_files() {
                 cp -r "${TEMP_CLONE}/mainsail/"* "${MAINSAIL_DIR}/"
             fi
             rm -rf "${TEMP_CLONE}/mainsail"
-            debug "Mainsail UI files installed successfully"
+            log "Mainsail UI files installed successfully"
         fi
     else
-        debug "Failed to clone Mainsail repository, installation will continue with placeholders"
+        log "Failed to clone Mainsail repository, installation will continue with placeholders"
         create_minimal_ui "mainsail"
     fi
     
     # Install Fluidd
-    debug "Installing Fluidd UI..."
+    log "Installing Fluidd UI..."
     rm -rf "${FLUIDD_DIR}"/*
     cd "${TEMP_CLONE}"
-    debug "Cloning Fluidd repository..."
+    log "Cloning Fluidd repository..."
     
     if git clone --depth=1 https://github.com/fluidd-core/fluidd.git; then
         if [ -d "${TEMP_CLONE}/fluidd" ]; then
             cp -r "${TEMP_CLONE}/fluidd/"* "${FLUIDD_DIR}/"
             rm -rf "${TEMP_CLONE}/fluidd"
-            debug "Fluidd UI files installed successfully"
+            log "Fluidd UI files installed successfully"
         fi
     else
-        debug "Failed to clone Fluidd repository, installation will continue with placeholders"
+        log "Failed to clone Fluidd repository, installation will continue with placeholders"
         create_minimal_ui "fluidd"
     fi
 }
@@ -537,7 +510,7 @@ create_minimal_ui() {
 </body>
 </html>
 EOF
-        debug "Created minimal Mainsail placeholder"
+        log "Created minimal Mainsail placeholder"
         
     elif [ "$UI_TYPE" = "fluidd" ]; then
         print_status "Creating minimal Fluidd UI"
@@ -562,7 +535,7 @@ EOF
 </body>
 </html>
 EOF
-        debug "Created minimal Fluidd placeholder"
+        log "Created minimal Fluidd placeholder"
     fi
 }
 
@@ -570,7 +543,7 @@ EOF
 create_download_script() {
     print_status "Creating UI download script for later use"
     
-    debug "Creating download_ui.sh script"
+    log "Creating download_ui.sh script"
     cat > "${USR_DATA}/download_ui.sh" << 'EOF'
 #!/bin/sh
 
@@ -663,35 +636,32 @@ fi
 EOF
 
     chmod +x "${USR_DATA}/download_ui.sh"
-    debug "download_ui.sh contents (first 10 lines):"
-    head -n 10 "${USR_DATA}/download_ui.sh"
-    
-    echo "Download script created at ${USR_DATA}/download_ui.sh"
+    log "Download script created at ${USR_DATA}/download_ui.sh"
 }
 
 # Start Moonraker
 start_moonraker() {
     print_status "Starting Moonraker"
     
-    debug "Checking if Moonraker is already running"
+    log "Checking if Moonraker is already running"
     if check_process "python3.*moonraker.py"; then
-        debug "Moonraker is already running, stopping it first"
+        log "Moonraker is already running, stopping it first"
         kill_process "python3.*moonraker.py"
     fi
     
-    debug "Starting Moonraker with start_moonraker.sh"
+    log "Starting Moonraker with start_moonraker.sh"
     "${USR_DATA}/start_moonraker.sh"
     
     # Check if Moonraker started
     sleep 2
     if check_process "python3.*moonraker.py"; then
-        debug "Moonraker process is running"
-        echo "Moonraker started successfully!"
+        log "Moonraker process is running"
+        log "Moonraker started successfully!"
     else
-        debug "Moonraker process is NOT running after start attempt"
-        debug "Checking Moonraker log:"
-        tail -n 20 "${LOGS_DIR}/moonraker.log" || debug "Could not read Moonraker log"
-        echo "Warning: Moonraker may not have started properly. Check logs at ${LOGS_DIR}/moonraker.log"
+        log "Moonraker process is NOT running after start attempt"
+        log "Checking Moonraker log:"
+        tail -n 20 "${LOGS_DIR}/moonraker.log" || log "Could not read Moonraker log"
+        log "Warning: Moonraker may not have started properly. Check logs at ${LOGS_DIR}/moonraker.log"
     fi
 }
 
@@ -700,28 +670,28 @@ start_nginx() {
     print_status "Starting Nginx"
     
     # Kill any existing Nginx process
-    debug "Stopping Nginx if it's already running"
+    log "Stopping Nginx if it's already running"
     kill_process "nginx"
     
     # Start Nginx
-    debug "Starting Nginx"
+    log "Starting Nginx"
     /opt/sbin/nginx
     
     # Check if Nginx started
     sleep 1
     if check_process "nginx"; then
-        debug "Nginx process is running"
-        echo "Nginx started successfully!"
+        log "Nginx process is running"
+        log "Nginx started successfully!"
     else
-        debug "Nginx is NOT running after start attempt"
-        debug "Checking Nginx error log:"
-        tail -n 20 /opt/var/log/nginx/error.log 2>/dev/null || debug "Could not read Nginx error log"
+        log "Nginx is NOT running after start attempt"
+        log "Checking Nginx error log:"
+        tail -n 20 /opt/var/log/nginx/error.log 2>/dev/null || log "Could not read Nginx error log"
         
         # Check for specific error conditions
-        debug "Testing Nginx configuration file"
+        log "Testing Nginx configuration file"
         /opt/sbin/nginx -t
         
-        echo "Warning: Nginx may not have started properly."
+        log "Warning: Nginx may not have started properly."
         return 1
     fi
 }
@@ -733,44 +703,44 @@ verify_installation() {
     local errors=0
     
     # Check Moonraker
-    debug "Checking if Moonraker is running"
+    log "Checking if Moonraker is running"
     if check_process "python3.*moonraker.py"; then
-        echo "✓ Moonraker is running"
+        log "✓ Moonraker is running"
     else
-        echo "✗ Moonraker is NOT running"
+        log "✗ Moonraker is NOT running"
         errors=$((errors + 1))
     fi
     
     # Check Nginx
-    debug "Checking if Nginx is running"
+    log "Checking if Nginx is running"
     if check_process "nginx"; then
-        echo "✓ Nginx is running"
+        log "✓ Nginx is running"
     else
-        echo "✗ Nginx is NOT running"
+        log "✗ Nginx is NOT running"
         errors=$((errors + 1))
     fi
     
     # Check UI files
     if [ -f "${MAINSAIL_DIR}/index.html" ]; then
-        echo "✓ Mainsail UI files are installed"
+        log "✓ Mainsail UI files are installed"
     else
-        echo "✗ Mainsail UI files are NOT installed"
+        log "✗ Mainsail UI files are NOT installed"
         errors=$((errors + 1))
     fi
     
     if [ -f "${FLUIDD_DIR}/index.html" ]; then
-        echo "✓ Fluidd UI files are installed"
+        log "✓ Fluidd UI files are installed"
     else
-        echo "✗ Fluidd UI files are NOT installed"
+        log "✗ Fluidd UI files are NOT installed"
         errors=$((errors + 1))
     fi
     
     # Report status
     if [ $errors -eq 0 ]; then
-        echo "✓ Installation verification passed!"
+        log "✓ Installation verification passed!"
         return 0
     else
-        echo "✗ Installation verification failed with $errors errors"
+        log "✗ Installation verification failed with $errors errors"
         return 1
     fi
 }
@@ -797,18 +767,18 @@ main() {
     verify_installation
     
     print_status "Installation complete!"
-echo ""
-echo "Moonraker is running on port 7125"
-echo "UI interfaces are installed and ready to use:"
-echo "  • Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
-echo "  • Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
-echo ""
-echo "Note: The official Creality warning states that running Moonraker"
-echo "for extended periods may cause memory issues on the K1 series."
-echo ""
-echo "Installation log saved to: ${SCRIPT_LOG}"
-echo ""
-echo "Enjoy!"
+log ""
+log "Moonraker is running on port 7125"
+log "UI interfaces are installed and ready to use:"
+log "  • Fluidd: http://$(ip route get 1 | awk '{print $7;exit}'):4408"
+log "  • Mainsail: http://$(ip route get 1 | awk '{print $7;exit}'):4409"
+log ""
+log "Note: The official Creality warning states that running Moonraker"
+log "for extended periods may cause memory issues on the K1 series."
+log ""
+log "Installation log saved to: ${SCRIPT_LOG}"
+log ""
+log "Enjoy!"
 }
 
 # Execute main function
