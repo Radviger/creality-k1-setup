@@ -53,10 +53,11 @@ exit_on_error() {
     exit 1
 }
 
-# Process status check
+# Process status check - BusyBox compatible
 check_process() {
     local process_name="$1"
-    local count=$(pgrep -fc "$process_name" || echo 0)
+    # Use ps and grep instead of pgrep for BusyBox compatibility
+    local count=$(ps | grep -v grep | grep -c "$process_name" || echo 0)
     if [ "$count" -gt 0 ]; then
         return 0  # Process is running
     else
@@ -89,6 +90,16 @@ kill_process() {
     else
         log "Process $process_name is confirmed stopped"
         return 0
+    fi
+}
+
+# Check if port is in use
+check_port() {
+    local port=$1
+    if $(netstat -an 2>/dev/null | grep -q ":$port "); then
+        return 0  # Port is in use
+    else
+        return 1  # Port is free
     fi
 }
 
@@ -287,9 +298,26 @@ create_nginx_config() {
     log "Removing any existing nginx.conf"
     rm -f /opt/etc/nginx/nginx.conf
     
-    # Create new nginx.conf
+    # Check which ports are available
+    local fluidd_port=4408
+    local mainsail_port=4409
+    
+    # Find available ports if default ones are in use
+    if check_port $fluidd_port; then
+        log "Port $fluidd_port is in use, trying alternative..."
+        fluidd_port=4410
+    fi
+    
+    if check_port $mainsail_port; then
+        log "Port $mainsail_port is in use, trying alternative..."
+        mainsail_port=4411
+    fi
+    
+    log "Using ports: Fluidd=$fluidd_port, Mainsail=$mainsail_port"
+    
+    # Create new nginx.conf - WITHOUT port 80 to avoid conflicts
     log "Creating new nginx.conf"
-    cat > /opt/etc/nginx/nginx.conf << 'EOF'
+    cat > /opt/etc/nginx/nginx.conf << EOF
 worker_processes 1;
 
 events {
@@ -302,47 +330,13 @@ http {
     sendfile on;
     keepalive_timeout 65;
 
-    # Serve Fluidd and Mainsail on port 80 with URL prefixes
+    # Serve Fluidd on its own port
     server {
-        listen 80;
-        server_name _;
-
-        location /fluidd {
-            alias /usr/data/fluidd;
-            try_files $uri $uri/ /fluidd/index.html;
-        }
-
-        location /mainsail {
-            alias /usr/data/mainsail;
-            try_files $uri $uri/ /mainsail/index.html;
-        }
-
-        location /websocket {
-            proxy_pass http://127.0.0.1:7125/websocket;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        }
-
-        location ~ ^/(printer|api|access|machine|server)/ {
-            proxy_pass http://127.0.0.1:7125;
-            proxy_http_version 1.1;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        }
-    }
-
-    # Also serve Fluidd on its own port
-    server {
-        listen 4408;
+        listen ${fluidd_port};
         root /usr/data/fluidd;
         
         location / {
-            try_files $uri $uri/ /index.html;
+            try_files \$uri \$uri/ /index.html;
         }
         
         location = /index.html {
@@ -352,29 +346,29 @@ http {
         location /websocket {
             proxy_pass http://127.0.0.1:7125/websocket;
             proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection $connection_upgrade;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection \$connection_upgrade;
+            proxy_set_header Host \$http_host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         }
         
         location ~ ^/(printer|api|access|machine|server)/ {
             proxy_pass http://127.0.0.1:7125;
             proxy_http_version 1.1;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host \$http_host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         }
     }
     
-    # Also serve Mainsail on its own port
+    # Serve Mainsail on its own port
     server {
-        listen 4409;
+        listen ${mainsail_port};
         root /usr/data/mainsail;
         
         location / {
-            try_files $uri $uri/ /index.html;
+            try_files \$uri \$uri/ /index.html;
         }
         
         location = /index.html {
@@ -384,23 +378,23 @@ http {
         location /websocket {
             proxy_pass http://127.0.0.1:7125/websocket;
             proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection $connection_upgrade;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection \$connection_upgrade;
+            proxy_set_header Host \$http_host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         }
         
         location ~ ^/(printer|api|access|machine|server)/ {
             proxy_pass http://127.0.0.1:7125;
             proxy_http_version 1.1;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host \$http_host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         }
     }
     
-    map $http_upgrade $connection_upgrade {
+    map \$http_upgrade \$connection_upgrade {
         default upgrade;
         '' close;
     }
@@ -461,8 +455,7 @@ install_ui_files() {
             log "Mainsail UI files installed successfully"
         fi
     else
-        log "Failed to clone Mainsail repository, installation will continue with placeholders"
-        create_minimal_ui "mainsail"
+        log "Failed to clone Mainsail repository"
     fi
     
     # Install Fluidd
@@ -478,64 +471,7 @@ install_ui_files() {
             log "Fluidd UI files installed successfully"
         fi
     else
-        log "Failed to clone Fluidd repository, installation will continue with placeholders"
-        create_minimal_ui "fluidd"
-    fi
-}
-
-# Create minimal UI files - UPDATED
-create_minimal_ui() {
-    UI_TYPE="$1"
-    
-    if [ "$UI_TYPE" = "mainsail" ]; then
-        print_status "Creating minimal Mainsail UI"
-        
-        # Create minimal Mainsail placeholder 
-        cat > "${MAINSAIL_DIR}/index.html" << 'EOF'
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Mainsail - Please Download UI</title>
-    <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px; }
-        h1 { color: #E76F51; }
-        p { margin: 20px 0; }
-    </style>
-</head>
-<body>
-    <h1>Mainsail UI Not Installed</h1>
-    <p>Please run the download script to install the Mainsail UI:</p>
-    <p><code>/usr/data/download_ui.sh</code></p>
-    <p>Or select option 2 from the menu.</p>
-</body>
-</html>
-EOF
-        log "Created minimal Mainsail placeholder"
-        
-    elif [ "$UI_TYPE" = "fluidd" ]; then
-        print_status "Creating minimal Fluidd UI"
-        
-        # Create minimal Fluidd placeholder
-        cat > "${FLUIDD_DIR}/index.html" << 'EOF'
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Fluidd - Please Download UI</title>
-    <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px; }
-        h1 { color: #0078D7; }
-        p { margin: 20px 0; }
-    </style>
-</head>
-<body>
-    <h1>Fluidd UI Not Installed</h1>
-    <p>Please run the download script to install the Fluidd UI:</p>
-    <p><code>/usr/data/download_ui.sh</code></p>
-    <p>Or select option 1 from the menu.</p>
-</body>
-</html>
-EOF
-        log "Created minimal Fluidd placeholder"
+        log "Failed to clone Fluidd repository"
     fi
 }
 
@@ -552,43 +488,6 @@ create_download_script() {
 # Function to log messages
 log() {
     echo "$(date +%H:%M:%S) - $1"
-}
-
-# Function to download UI using multiple methods
-download_ui() {
-    UI_NAME="$1"
-    UI_DIR="$2"
-    RELEASE_URL="$3"
-    
-    log "Downloading ${UI_NAME}..."
-    cd /usr/data
-    
-    # Try wget first
-    log "Trying wget method..."
-    wget --no-check-certificate -O ${UI_NAME,,}.zip "$RELEASE_URL"
-    if [ $? -eq 0 ]; then
-        log "Extracting ${UI_NAME}..."
-        rm -rf "${UI_DIR}"/*
-        unzip -o ${UI_NAME,,}.zip -d "${UI_DIR}"
-        rm ${UI_NAME,,}.zip
-        log "${UI_NAME} installed successfully!"
-        return 0
-    fi
-    
-    # Try curl as second option
-    log "Trying curl method..."
-    curl -L -k -o ${UI_NAME,,}.zip "$RELEASE_URL"
-    if [ $? -eq 0 ]; then
-        log "Extracting ${UI_NAME}..."
-        rm -rf "${UI_DIR}"/*
-        unzip -o ${UI_NAME,,}.zip -d "${UI_DIR}"
-        rm ${UI_NAME,,}.zip
-        log "${UI_NAME} installed successfully!"
-        return 0
-    fi
-    
-    log "All download methods failed for ${UI_NAME}."
-    return 1
 }
 
 # Main menu
@@ -621,12 +520,20 @@ show_menu() {
 
 # Download Fluidd
 download_fluidd() {
-    download_ui "Fluidd" "/usr/data/fluidd" "https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip"
+    log "Downloading Fluidd..."
+    cd /usr/data
+    rm -rf fluidd
+    git clone --depth=1 https://github.com/fluidd-core/fluidd.git
+    log "Fluidd installed successfully!"
 }
 
 # Download Mainsail
 download_mainsail() {
-    download_ui "Mainsail" "/usr/data/mainsail" "https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip"
+    log "Downloading Mainsail..."
+    cd /usr/data
+    rm -rf mainsail
+    git clone --depth=1 https://github.com/mainsail-crew/mainsail.git
+    log "Mainsail installed successfully!"
 }
 
 # Execute main menu if run directly
